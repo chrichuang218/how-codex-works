@@ -1,5 +1,9 @@
 # 第三方来源与许可
 
+## Codex Windows 中文助手图标
+
+页头 SVG 参考 [codex-windows-cn](https://github.com/chrichuang218/codex-windows-cn) 的 `icons/icon.ico`，保留云形与终端符号，重绘为本站紫色的 SVG 图标，采用浅紫到深紫的渐变和轻微高光。上游为 MIT License，版权声明为 `Copyright (c) 2026 vaportail`，全文见 [codex-windows-cn.txt](site/public/licenses/codex-windows-cn.txt)。
+
 ## Learn Claude Code
 
 本项目的首页与章节界面参考了 [Learn Claude Code](https://learn.shareai.run/) 的公开界面及 [shareAI-lab/learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) 源码。

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <linearGradient id="purple" x1="8" y1="3" x2="23" y2="30" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B49AEF"/>
+      <stop offset=".48" stop-color="#8962DB"/>
+      <stop offset="1" stop-color="#5F38B5"/>
+    </linearGradient>
+    <radialGradient id="light" cx="0" cy="0" r="1" gradientTransform="translate(10 6) rotate(55) scale(17 21)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff" stop-opacity=".2"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="140%">
+      <feDropShadow dx="0" dy=".6" stdDeviation=".55" flood-color="#402076" flood-opacity=".25"/>
+    </filter>
+    <path id="cloud" d="M10.5 3.8a8.4 8.4 0 0 1 9.8.5 8.6 8.6 0 0 1 8.4 8.2 9.2 9.2 0 0 1-.9 13 8.5 8.5 0 0 1-10.1 4.2 8.8 8.8 0 0 1-11.1-3.2 9 9 0 0 1-4-12.7 9 9 0 0 1 7.9-10Z"/>
+  </defs>
+  <use href="#cloud" fill="url(#purple)" filter="url(#shadow)"/>
+  <use href="#cloud" fill="url(#light)" stroke="#fff" stroke-opacity=".2" stroke-width=".55"/>
+  <path stroke="#422478" stroke-opacity=".18" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.7" d="m10 11.6 3.5 5-3.5 5m8-1h6"/>
+  <path stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.7" d="m10 11 3.5 5-3.5 5m8-1h6"/>
+</svg>

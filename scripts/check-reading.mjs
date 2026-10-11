@@ -549,7 +549,8 @@ export async function checkReading(page, url, label = 'local') {
   assert.equal(await menu.getAttribute('aria-expanded'), 'true');
   assert.equal(await menu.evaluate(node => Boolean(node.closest('[inert]'))), false, 'The same toggle must stay usable while the drawer is open');
   assert.ok(await sidebar.evaluate(node => node.contains(document.activeElement)), 'Opening the directory must move focus inside');
-  await page.locator('.sidebar-close').focus(); await page.keyboard.press('Shift+Tab');
+  assert.equal(await page.locator('.sidebar-close').count(), 0, 'The directory should have a single toggle, without a duplicate close button');
+  await page.locator('#chapter-search').focus(); await page.keyboard.press('Shift+Tab');
   assert.ok(await menu.evaluate(node => node === document.activeElement), 'Backward Tab must reach the same directory toggle');
   await page.keyboard.press('Tab');
   assert.ok(await sidebar.evaluate(node => node.contains(document.activeElement)), 'Forward Tab must stay inside the mobile menu');
