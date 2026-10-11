@@ -70,10 +70,10 @@ export async function checkReaderLayout(page, url, label = 'local') {
   const cases = [], failures = [], observedKinds = new Set();
   for (const width of [2560, 1440, 390]) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
-    for (const focus of [false, true]) {
+    for (const collapsed of width > 760 ? [false, true] : [false]) {
       for (const lesson of ['01-request', 'introduction']) {
         await page.goto(url + route(lesson)); await settled(page, lesson);
-        if (await page.locator('#focus-toggle').getAttribute('aria-pressed') !== String(focus)) await page.locator('#focus-toggle').click();
+        if (width > 760 && await page.locator('.menu-toggle').getAttribute('aria-expanded') !== String(!collapsed)) await page.locator('.menu-toggle').click();
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
         const geometry = await page.evaluate(lesson => {
           const article = document.querySelector(`[data-reader-page="${lesson}"]`);
@@ -101,24 +101,24 @@ export async function checkReaderLayout(page, url, label = 'local') {
           collect('pagination', [reader.querySelector('.chapter-pagination')]);
           return { readerLeft: reader.getBoundingClientRect().left, blocks, overflow: document.documentElement.scrollWidth > innerWidth + 1 };
         }, lesson);
-        cases.push({ width, focus, lesson, ...geometry });
+        cases.push({ width, collapsed, lesson, ...geometry });
         for (const block of geometry.blocks) {
           observedKinds.add(block.kind);
           const delta = block.left - geometry.readerLeft;
-          if (Math.abs(delta) > 1) failures.push(`${width}px ${focus ? 'focus' : 'normal'} ${lesson} ${block.kind}: left ${block.left}, reader ${geometry.readerLeft}, delta ${delta}`);
+          if (Math.abs(delta) > 1) failures.push(`${width}px ${collapsed ? 'collapsed' : 'expanded'} ${lesson} ${block.kind}: left ${block.left}, reader ${geometry.readerLeft}, delta ${delta}`);
           if (block.kind === 'table') {
-            if (block.scrollHeight > block.clientHeight) failures.push(`${width}px ${focus ? 'focus' : 'normal'} ${lesson} table: needless vertical scroll ${block.scrollHeight} > ${block.clientHeight}`);
-            if (width >= 1440 && lesson === '01-request' && block === geometry.blocks.find(item => item.kind === 'table') && block.scrollWidth > block.clientWidth) failures.push(`${width}px ${focus ? 'focus' : 'normal'} first input table: needless horizontal scroll ${block.scrollWidth} > ${block.clientWidth}`);
+            if (block.scrollHeight > block.clientHeight) failures.push(`${width}px ${collapsed ? 'collapsed' : 'expanded'} ${lesson} table: needless vertical scroll ${block.scrollHeight} > ${block.clientHeight}`);
+            if (width >= 1440 && lesson === '01-request' && block === geometry.blocks.find(item => item.kind === 'table') && block.scrollWidth > block.clientWidth) failures.push(`${width}px ${collapsed ? 'collapsed' : 'expanded'} first input table: needless horizontal scroll ${block.scrollWidth} > ${block.clientWidth}`);
           }
         }
-        if (geometry.overflow) failures.push(`${width}px ${focus ? 'focus' : 'normal'} ${lesson}: horizontal page overflow`);
-        await page.screenshot({ path: `work/reading-layout-${lesson}-${width}-${focus ? 'focus' : 'normal'}-${label}.png`, animations: 'disabled' });
+        if (geometry.overflow) failures.push(`${width}px ${collapsed ? 'collapsed' : 'expanded'} ${lesson}: horizontal page overflow`);
+        await page.screenshot({ path: `work/reading-layout-${lesson}-${width}-${collapsed ? 'collapsed' : 'expanded'}-${label}.png`, animations: 'disabled' });
       }
     }
   }
   await writeFile(`work/reading-layout-${label}.json`, JSON.stringify({ url, cases, failures }, null, 2) + '\n');
   await page.setViewportSize({ width: 1440, height: 1000 });
-  if (await page.locator('#focus-toggle').getAttribute('aria-pressed') === 'true') await page.locator('#focus-toggle').click();
+  if (await page.locator('.menu-toggle').getAttribute('aria-expanded') === 'false') await page.locator('.menu-toggle').click();
   for (const kind of ['breadcrumb', 'chapter-header', 'guide-title', 'paragraph', 'heading', 'blockquote', 'code', 'image', 'table', 'details', 'workbench', 'pagination']) assert.ok(observedKinds.has(kind), 'Layout coverage is missing ' + kind);
   assert.equal(failures.length, 0, `${failures.length} reader layout failures:\n` + failures.slice(0, 8).join('\n'));
   assert.equal(await page.locator('#introduction a[href="https://github.com/router-for-me/CLIProxyAPI/blob/main/README_CN.md"]').getAttribute('target'), '_blank', 'An external GitHub document must still open separately');
@@ -160,8 +160,25 @@ export async function checkReaderLayout(page, url, label = 'local') {
     assert.ok(await term.evaluate(node => node === document.activeElement), 'Escape must restore the original term focus on a narrow screen');
   }
   await writeFile(`work/reading-term-viewports-${label}.json`, JSON.stringify(termViewports, null, 2) + '\n');
+  for (const viewport of [{ width: 1920, height: 1080 }, { width: 2560, height: 1440 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto(url + route('introduction')); await settled(page, 'introduction');
+    // Earlier evidence checks may leave a supplement open below the article.
+    await page.reload(); await settled(page, 'introduction');
+    const last = page.locator('.chapter-outline a[data-section="introduction-section-2"]');
+    await last.click(); await settled(page, 'introduction');
+    assert.ok(await page.evaluate(() => Math.abs(scrollY + innerHeight - document.documentElement.scrollHeight) <= 2), 'The final guide section must exercise the page-bottom case');
+    assert.equal(await last.getAttribute('aria-current'), 'location', 'Clicking the last guide section must highlight it even when its heading cannot reach the reading line');
+    await page.screenshot({ path: `work/reading-last-section-${viewport.height}-${label}.png`, animations: 'disabled' });
+    await page.locator('#introduction-section-1').evaluate(node => node.scrollIntoView({ block: 'start', behavior: 'instant' }));
+    await settled(page, 'introduction');
+    assert.equal(await page.locator('.chapter-outline .current').getAttribute('data-section'), 'introduction-section-1', 'Scrolling back must restore the preceding section highlight');
+    await page.evaluate(() => scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
+    await settled(page, 'introduction');
+    assert.equal(await last.getAttribute('aria-current'), 'location', 'Manual scrolling to the bottom must highlight the final section too');
+  }
   await page.setViewportSize({ width: 1440, height: 1000 });
-  console.log(`Reader layout checks passed (${label}): ${cases.length} chapter/guide scenarios at 2560px, 1440px and 390px, normal/focus mode; shared outer left edge; no needless table scrollbars or page overflow; same-page timeline/external GitHub links; 375px/390px/320px header and term bounds, scrolling and Escape focus.`);
+  console.log(`Reader layout checks passed (${label}): ${cases.length} chapter/guide scenarios at 2560px, 1440px and 390px, expanded/collapsed desktop directory; shared outer left edge; no needless table scrollbars or page overflow; same-page timeline/external GitHub links; 375px/390px/320px header and term bounds, scrolling and Escape focus.`);
 }
 
 export async function checkWorkbenchDefaults(page, url, label = 'local') {
@@ -324,6 +341,15 @@ export async function checkReading(page, url, label = 'local') {
   await page.goto(url);
   await page.locator('#main[aria-busy="false"]').waitFor();
   if (await page.locator('html').evaluate(node => node.classList.contains('dark'))) await page.locator('#theme-toggle').click();
+  assert.equal(await page.locator('.site-header .search-toggle').count(), 0, 'Search should only be offered in the directory');
+  assert.equal(await page.locator('.github-corner').getAttribute('href'), 'https://github.com/chrichuang218/how-codex-works');
+  assert.equal(await page.locator('#theme-toggle').textContent(), '🌙');
+  await page.locator('#theme-toggle').click();
+  assert.equal(await page.locator('#theme-toggle').textContent(), '☀️');
+  await page.reload(); await page.locator('#main[aria-busy="false"]').waitFor();
+  assert.equal(await page.locator('#theme-toggle').getAttribute('aria-pressed'), 'true', 'The theme and its icon must survive reload together');
+  assert.equal(await page.locator('#theme-toggle').textContent(), '☀️');
+  await page.locator('#theme-toggle').click();
   const noOverflow = async name => assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, name + ': page overflows horizontally');
 
   // The baseline stores what old URLs meant before the reorganization. Check
@@ -435,13 +461,27 @@ export async function checkReading(page, url, label = 'local') {
   await term.press('Enter'); await page.locator('[data-close-term]').press('Enter');
   assert.ok(await term.evaluate(node => node === document.activeElement), 'The close button must also return focus to the original term');
 
-  await page.locator('#focus-toggle').click();
-  assert.equal(await page.locator('#focus-toggle').getAttribute('aria-pressed'), 'true');
-  assert.ok(await page.locator('body').evaluate(node => node.classList.contains('focus-reading')));
-  assert.ok(await page.locator('.course-sidebar').evaluate(node => node.inert), 'A hidden focus-mode directory must not receive focus');
-  await noOverflow('Desktop focus reading');
-  await page.screenshot({ path: `work/reading-focus-${label}.png`, animations: 'disabled' });
-  await page.locator('#focus-toggle').click();
+  const directoryToggle = page.locator('.menu-toggle');
+  assert.equal(await page.locator('#focus-toggle').count(), 0, 'The old focus-mode control must be removed');
+  assert.equal(await directoryToggle.getAttribute('aria-expanded'), 'true');
+  const scrollBeforeToggle = await page.evaluate(() => scrollY);
+  await directoryToggle.click();
+  assert.equal(await directoryToggle.getAttribute('aria-expanded'), 'false');
+  assert.ok(await page.locator('.course-sidebar').evaluate(node => node.inert), 'A collapsed directory must not receive focus');
+  assert.equal(await page.locator('#main').evaluate(node => getComputedStyle(node).marginLeft), '0px');
+  assert.ok(Math.abs(await page.evaluate(() => scrollY) - scrollBeforeToggle) <= 4, 'Collapsing the desktop directory must not reset reading position');
+  await noOverflow('Desktop directory collapsed');
+  await page.screenshot({ path: `work/reading-sidebar-collapsed-${label}.png`, animations: 'disabled' });
+  await directoryToggle.press('Enter');
+  assert.equal(await directoryToggle.getAttribute('aria-expanded'), 'true');
+  assert.equal(await page.locator('.course-sidebar').evaluate(node => node.inert), false);
+  await directoryToggle.press('Space');
+  await page.locator('.chapter-pagination a[data-direction="next"]').click(); await settled(page, '02-tools');
+  assert.equal(await directoryToggle.getAttribute('aria-expanded'), 'false', 'Chapter navigation must retain desktop collapse choice');
+  await page.keyboard.press('Control+k');
+  assert.equal(await directoryToggle.getAttribute('aria-expanded'), 'true', 'Search must reopen a collapsed desktop directory');
+  assert.ok(await page.locator('#chapter-search').evaluate(node => node === document.activeElement));
+  await page.goto(url + route('01-request')); await settled(page, '01-request');
 
   // Save through actual reading, survive a reload, and require the explicit
   // continue entry. No checklist or learning-state key may be changed.
@@ -507,12 +547,16 @@ export async function checkReading(page, url, label = 'local') {
   }
   await menu.click();
   assert.equal(await menu.getAttribute('aria-expanded'), 'true');
-  assert.equal(await sidebar.getAttribute('aria-modal'), 'true');
+  assert.equal(await menu.evaluate(node => Boolean(node.closest('[inert]'))), false, 'The same toggle must stay usable while the drawer is open');
   assert.ok(await sidebar.evaluate(node => node.contains(document.activeElement)), 'Opening the directory must move focus inside');
   await page.locator('.sidebar-close').focus(); await page.keyboard.press('Shift+Tab');
-  assert.ok(await sidebar.evaluate(node => node.contains(document.activeElement)), 'Backward Tab must stay inside the mobile menu');
+  assert.ok(await menu.evaluate(node => node === document.activeElement), 'Backward Tab must reach the same directory toggle');
   await page.keyboard.press('Tab');
   assert.ok(await sidebar.evaluate(node => node.contains(document.activeElement)), 'Forward Tab must stay inside the mobile menu');
+  await menu.click();
+  assert.equal(await menu.getAttribute('aria-expanded'), 'false', 'The same button must close the mobile drawer');
+  assert.ok(await sidebar.evaluate(node => node.inert));
+  await menu.click();
   await page.screenshot({ path: `work/reading-menu-mobile-${label}.png`, animations: 'disabled' });
   await page.keyboard.press('Escape');
   assert.equal(await menu.getAttribute('aria-expanded'), 'false');
@@ -528,8 +572,9 @@ export async function checkReading(page, url, label = 'local') {
   await page.screenshot({ path: `work/reading-mobile-dark-${label}.png`, animations: 'disabled' });
   await page.locator('#theme-toggle').click();
   await page.setViewportSize({ width: 1440, height: 1000 });
+  await settled(page, '02-tools');
   assert.equal(await sidebar.evaluate(node => node.inert), false, 'Desktop navigation must become available after resizing');
-  console.log(`Reading checks passed (${label}): ${anchors.length} historical anchors with exact destination text; ${guidedTargets} guided evidence targets including raw kinds; paragraph search, folded hit, empty/clear and keyboard selection; inline terms; explicit reading restore without mastery changes; evidence targets/return; focus mode; mobile inert/focus trap/Escape/navigation; light/dark screenshots.`);
+  console.log(`Reading checks passed (${label}): ${anchors.length} historical anchors with exact destination text; ${guidedTargets} guided evidence targets including raw kinds; paragraph search, folded hit, empty/clear and keyboard selection; inline terms; explicit reading restore without mastery changes; evidence targets/return; directory toggle; mobile inert/focus trap/Escape/navigation; light/dark screenshots.`);
 }
 
 // Reuse the same reader checks against the actual Pages deployment.

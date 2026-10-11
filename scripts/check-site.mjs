@@ -312,7 +312,7 @@ try {
   for (const lesson of catalog.lessons.filter(lesson => lesson !== hooks)) assert.ok(!lesson.evidenceIds.some(id => hookIds.includes(id)), lesson.id + ': stale Hook ownership');
   await page.goto(url + '#/'); await page.locator('.home-page:visible').waitFor();
   await page.locator('.lesson-card[data-card-lesson="10-hooks"]').click(); await waitChapter('10-hooks');
-  assert.equal(await page.locator('#chapter-10-hooks .chapter-number').textContent(), '10');
+  assert.equal(await page.locator('[data-nav-lesson="10-hooks"] .nav-number').textContent(), '10');
   assert.equal(await page.locator('#chapter-10-hooks .prose img').count(), 3, 'The Hooks chapter must contain the three real event screenshots.');
   assert.ok(await page.locator('#chapter-10-hooks .prose img').evaluateAll(images => images.every(image => !image.closest('details'))), 'All three Hook event screenshots must appear in the main article.');
   await page.screenshot({ path: 'work/site-hooks-desktop.png', fullPage: false, animations: 'disabled' });
@@ -411,6 +411,7 @@ try {
     }
     foldedHeadings.push(...await chapter.locator('.prose details h2,.prose details h3,.prose details h4,.prose details h5,.prose details h6,.prose details > summary[id]').evaluateAll(headings => headings.filter(heading => heading.tagName !== 'SUMMARY' || heading.textContent.trim().startsWith('深入')).map(heading => ({ id: heading.id, lesson: heading.closest('.chapter').dataset.lesson }))));
     assert.equal(await page.locator('.chapter-outline a').filter({ hasText: /核对答案|参考解释|核对思路/ }).count(), 0, 'Exercise answers should stay out of the chapter outline.');
+    assert.deepEqual(await page.locator('.chapter-outline a[data-section]').evaluateAll(links => links.filter(link => document.getElementById(link.dataset.section)?.closest('details')).map(link => link.textContent)), [], 'Folded supplementary content must stay out of the sidebar');
     assert.equal(await page.locator('.page-toc').count(), 0, 'Reading must not duplicate its sidebar outline in a third column.');
     assert.equal(await page.locator('.course-sidebar .chapter-outline').count(), 1, 'Exactly one chapter outline belongs in the sidebar.');
     assert.equal(await page.locator('.chapter-outline').evaluate(element => element.parentElement.dataset.navLesson), lesson.id, 'Only the current chapter can expose section links.');
@@ -422,6 +423,7 @@ try {
   }
   assert.ok(runtimeCodePaths.size > 0, 'The runnable examples must have direct file entries in the chapters.');
   console.log(`Verified ${runtimeCodePaths.size} runtime-lab code links and ${permissionPictures.length} sandbox screenshots with exact image bytes.`);
+  assert.equal(await page.locator('.site-header a[href="#/guide"]').count(), 0, 'The header should not duplicate the guide entry');
   assert.ok(foldedHeadings.length, 'In-depth sections should be reachable through actual folded content headings.');
   for (const { id, lesson } of foldedHeadings) {
     await page.evaluate(() => document.querySelectorAll('.prose details').forEach(details => details.open = false));
@@ -435,8 +437,8 @@ try {
   }
   const repeatedTarget = foldedHeadings.at(-1);
   await page.evaluate(() => document.querySelectorAll('.prose details').forEach(details => details.open = false));
-  await page.locator(`.chapter-outline [data-section="${repeatedTarget.id}"]`).click();
-  assert.ok(await page.locator(`[id="${repeatedTarget.id}"]`).evaluate(element => element.closest('details').open), 'Following the current link again must reopen its folded content.');
+  await page.reload(); await waitChapter(repeatedTarget.lesson);
+  assert.ok(await page.locator(`[id="${repeatedTarget.id}"]`).evaluate(element => element.closest('details').open), 'Refreshing a bookmarked section must reopen its folded content.');
   await page.evaluate(() => document.querySelectorAll('.prose details').forEach(details => details.open = false));
   assert.equal(await page.locator('.nav-chapter:not(.active) .chapter-outline').count(), 0, 'Other chapters must not repeat expanded section links.');
 

@@ -77,10 +77,6 @@ function refreshReadingReturns() {
 function guideTargets(lesson) {
   return (lesson.readingGuide?.targets || []).map(target => `<a href="${esc(evidenceHref(lesson.id, target.experiment, target.stage, target.view, { input: target.input, content: target.content, kind: target.kind }))}">${esc(target.label)}</a>`).join('');
 }
-function sampleDates(lesson) {
-  const dates = experiments.filter(experiment => lesson.evidenceIds.includes(experiment.id)).flatMap(experiment => experiment.stages.map(stage => stage.requestTimestamp?.slice(0, 10)).filter(Boolean)).sort();
-  return dates.length ? dates[0] === dates.at(-1) ? dates[0] : `${dates[0]} 至 ${dates.at(-1)}` : '日期未记录';
-}
 function nonnegativeInteger(value) {
   if (value === null || value === undefined || String(value).trim() === '') return undefined;
   const number = Number(value);
@@ -237,29 +233,24 @@ function homeMarkup() {
   return `<section class="home-page" id="home-view"><header class="home-hero"><span class="eyebrow">“你好”，就是 Codex 的 Hello World</span><h1><span>Codex</span><br class="hero-break"> 是如何工作的</h1><p>在真实 Codex Desktop 中，用一个简单的 TypeScript 项目做实验。打开请求和响应，查看请求中可见的完整上下文。</p><div class="hero-actions"><a class="primary-button" data-start-learning href="${href(catalog.lessons[0].id)}">开始学习 <span aria-hidden="true">→</span></a><a class="secondary-button" href="#/guide">阅读导读</a></div><div class="hero-evidence-links"><a data-hello-request href="${evidenceHref('01-request', '01-hello', 1, 'request')}">查看真实请求与上下文</a><span aria-hidden="true">·</span><a data-hello-response href="${evidenceHref('01-request', '01-hello', 1, 'output')}">查看响应与输出</a></div><p class="reading-options">无需安装即可阅读。亲自复现前，请先看<a href="#/guide">环境准备</a>。</p><div id="continue-reading" hidden></div><div class="hero-meta">${catalog.lessons.length} 个主题 <span>·</span> ${experiments.length} 组实验</div></header><section class="home-example" aria-label="贯穿教程的修复案例"><div><span class="eyebrow">从这个错误开始</span><h2>10 × 3，为什么得到 13？</h2><p>读文件、定位错误、修改运算符，再运行测试。一次用户要求，对应五次模型请求。</p><a href="${href('03-agent-loop', { section: 'agent-loop-timeline' })}">跟踪这次修复 <span aria-hidden="true">→</span></a></div><div class="bug-example"><div><span>修复前</span><code>return unitPrice + quantity;</code><strong>13</strong></div><div><span>修复后</span><code>return unitPrice * quantity;</code><strong>30 <small>测试通过</small></strong></div></div></section><section class="learning-path" aria-labelledby="path-title"><div class="path-header"><span class="eyebrow">学习路线</span><h2 id="path-title">从一次请求，到完整运行</h2><p>先读懂输入和工具往返，再追查上下文、扩展能力与完成条件。</p></div>${catalog.groups.map((group, index) => `<section class="phase-section" data-phase="${group.id}"><header class="phase-header"><span class="phase-number">0${index + 1}</span><div><h3>${esc(group.title)}</h3><p>${esc(group.description)}</p></div></header><div class="lesson-grid">${catalog.lessons.filter(lesson => lesson.group === group.id).map(lesson => `<a class="lesson-card" href="${href(lesson.id)}" data-card-lesson="${lesson.id}"><div class="card-top"><span>${lessonNumber(lesson)}</span><span aria-hidden="true">↗</span></div><h4>${esc(lesson.title)}</h4><p>${esc(lesson.subtitle)}</p>${lesson.status === 'partial' ? '<small class="card-status">含待验证内容</small>' : ''}</a>`).join('')}</div></section>`).join('')}</section></section>`;
 }
 function shell() {
-  document.querySelector('#app').innerHTML = `<a class="skip-link" href="#main">跳至正文</a><header class="site-header"><a class="brand" href="#/" aria-label="回到教程首页"><span class="brand-icon"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M10 9h7a6 6 0 0 1 6 6v8M9 9v14h14" stroke="currentColor" stroke-width="2"/><rect x="5" y="5" width="8" height="8" rx="2" fill="var(--paper)" stroke="currentColor" stroke-width="2"/><rect x="19" y="19" width="8" height="8" rx="2" fill="var(--paper)" stroke="currentColor" stroke-width="2"/></svg></span><span>How Codex Works</span></a><div class="header-actions"><a class="guide-link" href="#/guide">导读</a><a href="${repo}" target="_blank" rel="noopener">GitHub ↗</a><button class="search-toggle" aria-label="搜索课程">⌕ <span>搜索</span></button><button id="theme-toggle" aria-label="切换深浅主题">◐ <span>主题</span></button><button id="focus-toggle" aria-label="专注阅读" aria-pressed="false">⊡ <span>专注</span></button><button class="menu-toggle" aria-label="展开学习目录" aria-expanded="false">☰</button></div></header><div class="mobile-shade" hidden></div><aside class="course-sidebar" aria-label="课程目录与搜索"><button class="sidebar-close" aria-label="关闭学习目录">关闭 ×</button><div class="directory-search"><span>⌕</span><input id="chapter-search" type="search" aria-label="搜索文档" placeholder="搜索课程…"><button id="clear-search" aria-label="清除搜索" hidden>×</button></div><p id="search-status" role="status" aria-live="polite" hidden></p><div id="search-results" hidden></div><nav id="chapter-nav" aria-label="教程目录">${navMarkup()}</nav></aside><main id="main" tabindex="-1" aria-busy="true">${homeMarkup()}<section class="reader-page" id="reader-view" hidden><nav class="breadcrumb" aria-label="当前位置"></nav><div class="reading-layout"><div class="reading-content"><div id="lesson-content"></div><nav class="chapter-pagination" aria-label="章节翻页"></nav></div></div></section></main><footer class="site-footer"><div><a href="#/">Codex 是如何工作的</a></div></footer><button id="back-top" aria-label="回到顶部">↑</button><div class="toast" role="status" aria-live="polite"></div><aside id="term-definition" class="term-popover" popover aria-label="术语解释"><button data-close-term aria-label="关闭术语解释">×</button><strong></strong><p></p><a></a></aside>`;
+  document.querySelector('#app').innerHTML = `<a class="skip-link" href="#main">跳至正文</a><header class="site-header"><div class="header-start"><button class="menu-toggle" aria-label="展开学习目录" aria-controls="course-sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button><a class="brand" href="#/" aria-label="回到教程首页"><span class="brand-icon"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M10 9h7a6 6 0 0 1 6 6v8M9 9v14h14" stroke="currentColor" stroke-width="2"/><rect x="5" y="5" width="8" height="8" rx="2" fill="var(--paper)" stroke="currentColor" stroke-width="2"/><rect x="19" y="19" width="8" height="8" rx="2" fill="var(--paper)" stroke="currentColor" stroke-width="2"/></svg></span><span>How Codex Works</span></a></div><div class="header-actions"><button id="theme-toggle" aria-label="切换深浅主题" aria-pressed="false"></button><a class="github-corner" href="${repo}" target="_blank" rel="noopener" aria-label="在 GitHub 查看项目源码"><svg viewBox="0 0 250 250" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" class="octo-arm"></path><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor"></path></svg></a></div></header><div class="mobile-shade" hidden></div><aside id="course-sidebar" class="course-sidebar" aria-label="课程目录与搜索"><button class="sidebar-close" aria-label="关闭学习目录">关闭 ×</button><div class="directory-search"><span>⌕</span><input id="chapter-search" type="search" aria-label="搜索文档" placeholder="搜索课程…"><button id="clear-search" aria-label="清除搜索" hidden>×</button></div><p id="search-status" role="status" aria-live="polite" hidden></p><div id="search-results" hidden></div><nav id="chapter-nav" aria-label="教程目录">${navMarkup()}</nav></aside><main id="main" tabindex="-1" aria-busy="true">${homeMarkup()}<section class="reader-page" id="reader-view" hidden><nav class="breadcrumb" aria-label="当前位置"></nav><div class="reading-layout"><div class="reading-content"><div id="lesson-content"></div><nav class="chapter-pagination" aria-label="章节翻页"></nav></div></div></section></main><footer class="site-footer"><div><a href="#/">Codex 是如何工作的</a></div></footer><button id="back-top" aria-label="回到顶部">↑</button><div class="toast" role="status" aria-live="polite"></div><aside id="term-definition" class="term-popover" popover aria-label="术语解释"><button data-close-term aria-label="关闭术语解释">×</button><strong></strong><p></p><a></a></aside>`;
   document.querySelector('#theme-toggle').onclick = () => {
     document.documentElement.classList.toggle('dark');
+    syncThemeButton();
     try { localStorage.setItem('ah-theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light'); } catch { /* Theme remains usable without storage. */ }
   };
-  document.querySelector('.menu-toggle').onclick = () => toggleMenu(!document.body.classList.contains('menu-open'));
-  document.querySelector('.search-toggle').onclick = () => { toggleMenu(true); document.querySelector('#chapter-search').focus(); };
+  document.querySelector('.menu-toggle').onclick = () => toggleMenu(!sidebarIsOpen());
   document.querySelector('.mobile-shade').onclick = () => toggleMenu(false);
   document.querySelector('.sidebar-close').onclick = () => toggleMenu(false);
-  document.querySelector('#focus-toggle').onclick = () => {
-    const focused = document.body.classList.toggle('focus-reading');
-    const button = document.querySelector('#focus-toggle');
-    button.setAttribute('aria-pressed', String(focused));
-    button.setAttribute('aria-label', focused ? '退出专注阅读' : '专注阅读');
-    button.querySelector('span').textContent = focused ? '退出专注' : '专注';
-    toggleMenu(false, false); syncSidebar();
-  };
   document.querySelector('.skip-link').onclick = event => { event.preventDefault(); document.querySelector('#main').focus(); document.querySelector('#main').scrollIntoView(); };
   document.querySelector('#back-top').onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
   document.querySelector('#chapter-search').oninput = () => filterNavigation().catch(error => { console.error(error); showToast('搜索暂时不可用'); });
   document.querySelector('#clear-search').onclick = () => { document.querySelector('#chapter-search').value = ''; filterNavigation(); document.querySelector('#chapter-search').focus(); };
   document.querySelector('#term-definition').addEventListener('toggle', event => { if (event.newState === 'closed') termOpener?.setAttribute('aria-expanded', 'false'); });
-  matchMedia('(max-width: 760px)').addEventListener('change', () => { toggleMenu(false, false); syncSidebar(); });
+  matchMedia('(max-width: 760px)').addEventListener('change', () => {
+    document.body.classList.remove('menu-open'); syncSidebar();
+    if (document.activeElement.closest('[inert]')) document.querySelector('.menu-toggle').focus({ preventScroll: true });
+  });
   document.addEventListener('click', handleClick);
   document.addEventListener('change', event => {
     const host = event.target.closest('[data-workbench]');
@@ -275,7 +266,7 @@ function shell() {
     }
     if (event.key === 'Escape' && document.body.classList.contains('menu-open')) toggleMenu(false);
     if (event.key === 'Tab' && document.body.classList.contains('menu-open')) {
-      const focusable = [...document.querySelector('.course-sidebar').querySelectorAll('a,button,input,select,[tabindex="0"]')].filter(node => !node.disabled && node.getClientRects().length);
+      const focusable = [document.querySelector('.menu-toggle'), ...document.querySelector('.course-sidebar').querySelectorAll('a,button,input,select,[tabindex="0"]')].filter(node => !node.disabled && node.getClientRects().length);
       const first = focusable[0]; const last = focusable.at(-1);
       if (event.shiftKey && (document.activeElement === first || !focusable.includes(document.activeElement))) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && (document.activeElement === last || !focusable.includes(document.activeElement))) { event.preventDefault(); first.focus(); }
@@ -287,27 +278,43 @@ function shell() {
     const state = states.get(entry.target.dataset.workbench);
     if (!state.loaded) renderWorkbench(state, false);
   }), { rootMargin: '-64px 0px 150px 0px' });
-  syncSidebar(); refreshContinueReading();
+  syncThemeButton(); syncSidebar(); refreshContinueReading();
+}
+function syncThemeButton() {
+  const dark = document.documentElement.classList.contains('dark');
+  const button = document.querySelector('#theme-toggle');
+  button.textContent = dark ? '☀️' : '🌙';
+  button.title = dark ? '切换至浅色主题' : '切换至深色主题';
+  button.setAttribute('aria-pressed', String(dark));
 }
 function sidebarOverlay() {
-  return matchMedia('(max-width: 760px)').matches || document.body.dataset.view !== 'reader' || document.body.classList.contains('focus-reading');
+  return matchMedia('(max-width: 760px)').matches || document.body.dataset.view !== 'reader';
+}
+function sidebarIsOpen() {
+  return sidebarOverlay() ? document.body.classList.contains('menu-open') : !document.body.classList.contains('sidebar-collapsed');
 }
 function syncSidebar() {
-  const open = document.body.classList.contains('menu-open');
-  const overlay = sidebarOverlay();
+  const open = sidebarIsOpen();
+  const overlayOpen = open && sidebarOverlay();
   const sidebar = document.querySelector('.course-sidebar');
-  sidebar.inert = overlay && !open;
-  sidebar.setAttribute('aria-hidden', String(sidebar.inert));
-  if (open && overlay) { sidebar.setAttribute('role', 'dialog'); sidebar.setAttribute('aria-modal', 'true'); }
-  else { sidebar.removeAttribute('role'); sidebar.removeAttribute('aria-modal'); }
-  document.querySelector('.mobile-shade').hidden = !open;
-  document.querySelector('.sidebar-close').hidden = !open;
-  document.querySelector('.menu-toggle').setAttribute('aria-expanded', String(open));
-  for (const node of document.querySelectorAll('#main,.site-footer,.site-header,#back-top')) node.inert = open && overlay;
+  sidebar.inert = !open;
+  sidebar.setAttribute('aria-hidden', String(!open));
+  document.querySelector('.mobile-shade').hidden = !overlayOpen;
+  document.querySelector('.sidebar-close').hidden = !overlayOpen;
+  const toggle = document.querySelector('.menu-toggle');
+  toggle.setAttribute('aria-expanded', String(open));
+  toggle.setAttribute('aria-label', open ? '收起学习目录' : '展开学习目录');
+  // Keep the same toggle available while the drawer is open.
+  for (const node of document.querySelectorAll('#main,.site-footer,.brand,.header-actions,#back-top')) node.inert = overlayOpen;
 }
 function toggleMenu(open, restoreFocus = true) {
+  if (!sidebarOverlay()) {
+    document.body.classList.toggle('sidebar-collapsed', !open);
+    syncSidebar();
+    if (document.activeElement.closest('[inert]')) document.querySelector('.menu-toggle').focus({ preventScroll: true });
+    return;
+  }
   const wasOpen = document.body.classList.contains('menu-open');
-  if (open && !sidebarOverlay()) { document.querySelector('#chapter-search').focus(); return; }
   if (open && !wasOpen) menuOpener = document.activeElement;
   document.body.classList.toggle('menu-open', open);
   syncSidebar();
@@ -411,7 +418,7 @@ async function ensurePage(lesson) {
     } else {
       page.id = 'chapter-' + lesson.id; page.className = 'chapter'; page.dataset.lesson = lesson.id;
       const markdown = text.replace(/^# [^\n]+\n/, '');
-      template.innerHTML = `<header class="chapter-header"><div class="chapter-kicker"><span class="chapter-number">${lessonNumber(lesson)}</span><span>${esc(catalog.groups.find(group => group.id === lesson.group).title)}</span></div><h1>${esc(lesson.title)}</h1><p class="chapter-subtitle">${esc(lesson.subtitle || '')}</p><div class="chapter-meta"><span>样本：${esc(sampleDates(lesson))}</span>${lesson.status === 'partial' ? '<span>部分行为尚未验证，具体范围见正文。</span>' : ''}<a href="${repo}/blob/main/${lesson.file}" target="_blank" rel="noopener">Markdown 原文 ↗</a></div>${lesson.readingGuide ? `<p class="chapter-prerequisite"><strong>本章起点</strong>${esc(lesson.readingGuide.prerequisite)}</p>` : ''}</header><article class="prose">${DOMPurify.sanitize(marked.parse(markdown))}</article>${workbenchShell(lesson)}`;
+      template.innerHTML = `<header class="chapter-header"><h1>${esc(lesson.title)}</h1><p class="chapter-subtitle">${esc(lesson.subtitle || '')}</p></header><article class="prose">${DOMPurify.sanitize(marked.parse(markdown))}</article>${workbenchShell(lesson)}`;
       // The Markdown navigation still works on GitHub; the site has a dedicated
       // previous/next control below the workbench.
       const last = template.content.querySelector('.prose > p:last-child');
@@ -483,7 +490,7 @@ function showPage(page, lesson) {
   // Same-chapter routes keep the existing controls and their keyboard focus.
   if (!outline) {
     document.querySelector('.chapter-outline')?.remove();
-    const headings = outlines.get(lesson.id) || [];
+    const headings = (outlines.get(lesson.id) || []).filter(heading => !page.querySelector(`#${CSS.escape(heading.id)}`)?.closest('details'));
     outline = document.createElement('nav'); outline.className = 'chapter-outline'; outline.id = 'outline-' + lesson.id; outline.setAttribute('aria-label', '本章目录');
     outline.innerHTML = headings.map(heading => `<a href="${href(lesson.id, { section: heading.id })}" data-section="${heading.id}" data-depth="${heading.depth || 0}" style="--section-depth:${heading.depth || 0}">${esc(heading.text)}</a>`).join('') + (lesson.id === 'introduction' ? '' : `<a href="${href(lesson.id, { section: 'workbench-' + lesson.id })}" data-section="workbench-${lesson.id}" data-depth="0" style="--section-depth:0">证据工作台</a>`);
     chapter.append(outline);
@@ -542,7 +549,7 @@ async function renderWorkbench(state, updateUrl = true) {
     if (version !== state.version) return;
     const response = completed.response || completed;
     const next = experiments.flatMap(item => item.stages.map((nextStage, index) => ({ experiment: item, stage: nextStage, index }))).filter(item => item.stage.previousResponseId === stage.responseId);
-    host.querySelector('.request-metadata').innerHTML = `<p class="sample-scope">样本：${esc(stage.requestTimestamp?.slice(0, 10) || '日期未记录')} · 模型标识：${esc(request.model)}<br>本记录仅说明当时配置下的行为；未记录的客户端版本不作推测。<a href="${esc(href(state.lessonId, { file: `evidence/desktop-lab/${experiment.id}/manifest.json` }))}">查看实验来源</a></p><details><summary>样本与响应信息</summary><dl><div><dt>请求时间</dt><dd>${esc(stage.requestTimestamp)}</dd></div><div><dt>model / generate</dt><dd><code>${esc(request.model)}</code> / ${has(request, 'generate') ? esc(request.generate) : '未显式设置'}</dd></div><div><dt>previous_response_id</dt><dd>${responseLink(request.previous_response_id, state.lessonId)}</dd></div><div><dt>本次 response.id</dt><dd><code>${esc(response.id || stage.responseId)}</code></dd></div><div><dt>后续响应引用</dt><dd>${next.length ? next.map(item => responseLink(item.stage.responseId, state.lessonId, item.experiment.id + ' / ' + item.stage.id)).join(' · ') : '当前记录中没有直接引用；后续上下文也可能通过历史重发接续。'}</dd></div></dl></details>`;
+    host.querySelector('.request-metadata').innerHTML = `<details><summary>样本与响应信息</summary><p class="sample-scope">本记录仅说明当时配置下的行为；未记录的客户端版本不作推测。<a href="${esc(href(state.lessonId, { file: `evidence/desktop-lab/${experiment.id}/manifest.json` }))}">查看实验来源</a></p><dl><div><dt>请求时间</dt><dd>${esc(stage.requestTimestamp)}</dd></div><div><dt>model / generate</dt><dd><code>${esc(request.model)}</code> / ${has(request, 'generate') ? esc(request.generate) : '未显式设置'}</dd></div><div><dt>previous_response_id</dt><dd>${responseLink(request.previous_response_id, state.lessonId)}</dd></div><div><dt>本次 response.id</dt><dd><code>${esc(response.id || stage.responseId)}</code></dd></div><div><dt>后续响应引用</dt><dd>${next.length ? next.map(item => responseLink(item.stage.responseId, state.lessonId, item.experiment.id + ' / ' + item.stage.id)).join(' · ') : '当前记录中没有直接引用；后续上下文也可能通过历史重发接续。'}</dd></div></dl></details>`;
     if (state.view === 'request') { content.innerHTML = requestMarkup(request); openRequestFocus(content, requestFocus(request, state)); }
     else if (state.view === 'output') content.innerHTML = outputMarkup(derived, completed);
     else if (state.view === 'calls') {
@@ -665,7 +672,7 @@ async function handleClick(event) {
     const link = document.createElement('a'); link.href = blob; link.download = path.split('/').at(-1); link.click(); setTimeout(() => URL.revokeObjectURL(blob), 1000); return;
   }
   if (event.target.closest('[data-close-source]')) { event.target.closest('.supplement').hidden = true; return; }
-  if (event.target.closest('.course-sidebar a')) toggleMenu(false, false);
+  if (sidebarOverlay() && event.target.closest('.course-sidebar a')) toggleMenu(false, false);
   const host = event.target.closest('[data-workbench]');
   if (!host) return;
   const state = states.get(host.dataset.workbench);
@@ -752,7 +759,7 @@ async function route() {
     else if (id !== requestedId && requestedId !== '0' && params.get('section')?.startsWith(requestedId + '-section-')) params.delete('section');
     history.replaceState(null, '', href(id, Object.fromEntries(params)));
   }
-  toggleMenu(false, false);
+  if (sidebarOverlay()) toggleMenu(false, false);
   const main = document.querySelector('#main');
   if (!lesson && id !== 'introduction') {
     if (id) showToast('未找到该章节，已返回学习路线。');
@@ -811,9 +818,10 @@ function revealSection(element) {
 function showToast(text) { const toast = document.querySelector('.toast'); toast.textContent = text; toast.classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('visible'), 2200); }
 function scrollSpy() {
   document.querySelector('#back-top').classList.toggle('visible', scrollY > 400);
-  const page = document.querySelector('[data-reader-page]:not([hidden])');
-  const headings = page ? [...page.querySelectorAll('.prose h2[id],.prose h3[id],.prose h4[id],.prose h5[id],.prose h6[id],.prose details > summary[id],.agent-loop-timeline,.workbench')] : [];
-  const current = headings.filter(node => node.getClientRects().length && node.getBoundingClientRect().top < 170).at(-1);
+  const headings = [...document.querySelectorAll('.chapter-outline [data-section]')].map(link => document.getElementById(link.dataset.section)).filter(Boolean);
+  // A short final section cannot reach the usual reading line at page bottom.
+  const atBottom = scrollY > 0 && scrollY + innerHeight >= document.documentElement.scrollHeight - 2;
+  const current = headings.filter(node => node.getClientRects().length && node.getBoundingClientRect().top < (atBottom ? innerHeight : 170)).at(-1);
   document.querySelectorAll('.chapter-outline [data-section]').forEach(link => {
     const active = Boolean(current?.id) && link.dataset.section === current.id;
     link.classList.toggle('current', active);

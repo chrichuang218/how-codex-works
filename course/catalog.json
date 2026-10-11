@@ -35,7 +35,6 @@
         "01-hello"
       ],
       "readingGuide": {
-        "prerequisite": "可直接开始阅读；样本在故障版项目新建任务，尚未添加后面的项目规则。",
         "focus": "比较两条 user 消息：input[5] 是应用附加的规则与环境，input[6] 是输入框里的“你好”。",
         "targets": [
           {
@@ -74,7 +73,6 @@
         "03-readme"
       ],
       "readingGuide": {
-        "prerequisite": "接着第一章的原任务；样本已有问候和追问两轮历史，项目仍保留加法错误。",
         "focus": "先看读取调用，再找相同 call_id 的返回；分清文件正文何时进入模型。",
         "targets": [
           {
@@ -105,7 +103,6 @@
         "06-tests"
       ],
       "readingGuide": {
-        "prerequisite": "会配对工具调用与返回。样本沿用故障项目及失败测试历史，已经加载项目规则和技能；它们的机制在后续章节学习。",
         "focus": "沿 R0–R4 追踪新信息如何改变下一步，最后核对文件和三项检查是否满足用户要求。",
         "targets": [
           {
@@ -146,7 +143,6 @@
         "08-session-resume"
       ],
       "readingGuide": {
-        "prerequisite": "理解一次用户轮次可以包含多次模型请求。对照同项目的新任务与原任务，临时代号只写在原聊天中。",
         "focus": "分别查当前 input 与响应引用，解释原任务答对而新任务不知道的来源。",
         "targets": [
           {
@@ -194,7 +190,6 @@
         "07-fix"
       ],
       "readingGuide": {
-        "prerequisite": "接续已经修复并设置 PRICE-A7 的原任务；样本通过原生菜单手动压缩，不是等待自动阈值。",
         "focus": "核对压缩摘要、本地替换历史和后续请求，区分压缩、历史引用与缓存计数。",
         "targets": [
           {
@@ -231,7 +226,6 @@
         "03-readme"
       ],
       "readingGuide": {
-        "prerequisite": "项目仍为故障版；本轮新增项目 AGENTS.md，要求只读 README 并改变回答前缀。",
         "focus": "从请求的规则块找到项目约定，再对照工具范围和回答前缀。",
         "targets": [
           {
@@ -263,7 +257,6 @@
         "07-fix"
       ],
       "readingGuide": {
-        "prerequisite": "项目保留加法错误并已有项目规则；本轮显式选择只读概览技能。",
         "focus": "比较技能目录、显式附加正文和之后的工具读取，确认正文第一次进入请求的时机。",
         "targets": [
           {
@@ -303,7 +296,6 @@
         "native-memory-recall-consolidated-off"
       ],
       "readingGuide": {
-        "prerequisite": "文件笔记实验使用修复版项目并新建任务读取；原生记忆另用独立来源聊天和开关对照，不能与文件笔记混作一次运行。",
         "focus": "分清笔记读取与原生摘要注入；对照整合后启用、关闭记忆的新任务。",
         "targets": [
           {
@@ -343,7 +335,6 @@
         "13-mcp"
       ],
       "readingGuide": {
-        "prerequisite": "使用 MCP 项目快照并连接商品目录服务；样本任务已读项目笔记，本轮只给商品编号和数量。",
         "focus": "先找到单价 12 的返回，再追查模型如何发现接口、传入 NOTEBOOK 并取得服务结果。",
         "targets": [
           {
@@ -385,7 +376,6 @@
         "hook-c-tool-origin"
       ],
       "readingGuide": {
-        "prerequisite": "理解规则、技能和工具调用。三种 Hook 各有独立受控实验，提交路径、信任与允许目标以各段配置为准。",
         "focus": "比较提交时注入、执行前拦截、执行后记录三个时机，分别核对 Hook 事件与工具结果。",
         "targets": [
           {
@@ -431,7 +421,6 @@
         "15-permissions"
       ],
       "readingGuide": {
-        "prerequisite": "样本在 workspace-write 和 on-request 条件下只尝试一次写入；目标是工作区外的探针文件。",
         "focus": "找到实际写入尝试、权限错误与文件前后结果，判断是谁阻止了动作。",
         "targets": [
           {
@@ -461,7 +450,6 @@
         "14-plan-implement"
       ],
       "readingGuide": {
-        "prerequisite": "从修复版进入折扣需求；先在 Plan Mode 调查与澄清，再经用户确认实施。金额是否舍入是本次待决策项。",
         "focus": "查用户的精度选择怎样回传，分清计划阶段检查和实施后的功能验证。",
         "targets": [
           {
@@ -498,7 +486,6 @@
         "16-agent-b"
       ],
       "readingGuide": {
-        "prerequisite": "折扣功能已实施；父任务明确委派两个只读审查，不允许子任务修改项目。",
         "focus": "分别检查委派要求、子 Agent 上下文与独立结果，再看父任务如何汇集。",
         "targets": [
           {
@@ -544,7 +531,6 @@
         "plan-status"
       ],
       "readingGuide": {
-        "prerequisite": "在折扣版与独立运行状态副本中观察不同实验；原生 Goal、文字进度、失败、中断和续跑各有独立记录。",
         "focus": "每次区分“工具已返回”“进程已结束”和“任务已完成”，从文件与退出码确认继续工作的依据。",
         "targets": [
           {
@@ -599,7 +585,6 @@
         "07-fix"
       ],
       "readingGuide": {
-        "prerequisite": "复用第 3 章最后一次已验证的修复响应；本章只研究响应怎样生成，不重新验收修复。",
         "focus": "将增量拼成输出项，并区分文本结束、输出项结束与响应结束。",
         "targets": [
           {
@@ -639,7 +624,6 @@
         "16-multi-agent"
       ],
       "readingGuide": {
-        "prerequisite": "已能追踪请求、工具返回与执行状态。沿用前面已核验的案例，改为判断各组件职责与证据范围。",
         "focus": "按待回答的问题选记录：界面、请求、运行层事件、工具结果与最终文件分别能证明什么。",
         "targets": [
           {

@@ -26,3 +26,7 @@
 参考位置为 `index.html` 中的 Docsify 配置（`loadSidebar`、`subMaxLevel`）、主题变量和它引用的 `docsify-themeable` 样式。上游为 MIT License，版权声明为 `Copyright (c) 2025 Windy3f3f3f3f`，全文保存在 [how-claude-code-works.txt](site/public/licenses/how-claude-code-works.txt) 并随网站发布。
 
 本项目保留已有首页、框架与紫色主题，章节导航由本项目的目录和正文生成。未复制参考站的品牌、图片、文章或 Claude Code 内部机制结论，也未引入 Docsify 作为依赖。
+
+2026-10-11 的本地界面调整进一步参考该站 `index.html` 中的圆形主题按钮，以及 Docsify 生成的 GitHub 角标 SVG。桌面保留 34px 主题按钮、70px 角标；为适配本站固定页头，角标保持可见，手机角标缩至 56px，按钮右距改为 72px。仅保留主题与项目链接，没有引入参考站的语言切换功能。
+
+GitHub 角标取自 Docsify 的 MIT 许可实现，声明见 [docsify.txt](site/public/licenses/docsify.txt)。本项目链接指向自己的源码仓库。
