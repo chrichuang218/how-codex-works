@@ -239,7 +239,8 @@ export async function checkWorkbenchDefaults(page, url, label = 'local') {
       } else if (actual.view === 'calls') await verifyCalls(host, source.request, source.output);
       else {
         assert.equal(await host.locator('.raw-select').inputValue(), 'eventsFile', 'The streaming chapter starts with actual streamed events');
-        assert.equal(await host.locator('[data-raw-content]').textContent(), await readFile(source.stage.eventsFile, 'utf8'));
+        // Windows checkout uses CRLF; the Pages build reads the same Git blob as LF.
+        assert.equal((await host.locator('[data-raw-content]').textContent()).replace(/\r\n/g, '\n'), (await readFile(source.stage.eventsFile, 'utf8')).replace(/\r\n/g, '\n'), 'Raw event text must match apart from checkout line endings');
       }
     }
     // A fresh home entry must use the same two-input comparison, not treat the
