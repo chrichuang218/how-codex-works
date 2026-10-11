@@ -77,6 +77,8 @@ npm run dev
 
 内容主归属和迁移决定见[章节整理清单](docs/content-reorganization.md)。修改标题时同步 [固定小节 ID](course/section-ids.json)，已迁走的小节在目录的 `sectionRedirects` 中给出准确目标；不要重新按当前位置给旧标题编号。
 
+工作台以 `readingGuide.targets` 的首项作为本章默认实验、请求和视图；同一请求的 `input` / `content` 目标决定默认展开哪些内容。维护观察重点时同步这些入口，不按文本长度推测重要性。精确分享链接优先使用链接指定的位置，完整原文始终保留。
+
 验证运行 `npm run check`、`npm run build`、`npm run check:site`。浏览器回归读取 `dist/` 并启动临时本地服务，需要系统已安装 Google Chrome；它同时核对完整证据、旧链接及阅读交互。也可用 `node scripts/check-reading.mjs https://chrichuang218.github.io/how-codex-works/` 对线上站点执行阅读回归。发布构建的 `build-info.json` 记录版本与提交，便于核对部署。
 
 欢迎补充另一个版本的复现结果，或指出某段解释与证据不符。提交问题时，请附章节、操作、实际结果及脱敏后的相关片段。

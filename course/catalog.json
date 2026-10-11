@@ -43,14 +43,16 @@
             "experiment": "01-hello",
             "stage": 1,
             "view": "request",
-            "input": 5
+            "input": 5,
+            "content": 1
           },
           {
             "label": "查看用户问候",
             "experiment": "01-hello",
             "stage": 1,
             "view": "request",
-            "input": 6
+            "input": 6,
+            "content": 0
           },
           {
             "label": "对照问候回答",
@@ -110,7 +112,9 @@
             "label": "修复开始",
             "experiment": "07-fix",
             "stage": 0,
-            "view": "request"
+            "view": "request",
+            "input": 0,
+            "content": 0
           },
           {
             "label": "修复后的验证返回",
@@ -146,10 +150,20 @@
         "focus": "分别查当前 input 与响应引用，解释原任务答对而新任务不知道的来源。",
         "targets": [
           {
-            "label": "历史直接重发",
+            "label": "重发的上轮问候",
             "experiment": "02-context",
             "stage": 0,
-            "view": "request"
+            "view": "request",
+            "input": 6,
+            "content": 0
+          },
+          {
+            "label": "本轮追问",
+            "experiment": "02-context",
+            "stage": 0,
+            "view": "request",
+            "input": 9,
+            "content": 0
           },
           {
             "label": "新任务追问",
@@ -257,7 +271,8 @@
             "experiment": "05-skills",
             "stage": 0,
             "view": "request",
-            "input": 7
+            "input": 7,
+            "content": 0
           },
           {
             "label": "之后读取的文件",
@@ -295,19 +310,24 @@
             "label": "从文件读取笔记",
             "experiment": "12-memory-read",
             "stage": 1,
-            "view": "request"
+            "view": "request",
+            "input": 0
           },
           {
             "label": "整合后启用记忆",
             "experiment": "native-memory-recall-consolidated",
             "stage": 0,
-            "view": "request"
+            "view": "request",
+            "input": 2,
+            "content": 1
           },
           {
             "label": "独立关闭对照",
             "experiment": "native-memory-recall-consolidated-off",
             "stage": 0,
-            "view": "request"
+            "view": "request",
+            "input": 9,
+            "content": 0
           }
         ]
       }
@@ -327,6 +347,13 @@
         "focus": "先找到单价 12 的返回，再追查模型如何发现接口、传入 NOTEBOOK 并取得服务结果。",
         "targets": [
           {
+            "label": "取得价格后的请求",
+            "experiment": "13-mcp",
+            "stage": 2,
+            "view": "request",
+            "input": 0
+          },
+          {
             "label": "发现服务接口",
             "experiment": "13-mcp",
             "stage": 0,
@@ -337,12 +364,6 @@
             "experiment": "13-mcp",
             "stage": 1,
             "view": "calls"
-          },
-          {
-            "label": "取得价格后的请求",
-            "experiment": "13-mcp",
-            "stage": 2,
-            "view": "request"
           }
         ]
       }
@@ -371,7 +392,17 @@
             "label": "提交编号",
             "experiment": "hook-marker-repeat",
             "stage": 0,
-            "view": "request"
+            "view": "request",
+            "input": 10,
+            "content": 0
+          },
+          {
+            "label": "对照提交的用户要求",
+            "experiment": "hook-marker-repeat",
+            "stage": 0,
+            "view": "request",
+            "input": 9,
+            "content": 0
           },
           {
             "label": "补丁被拦截",
@@ -477,16 +508,20 @@
             "view": "output"
           },
           {
-            "label": "子 Agent A 首次正式请求",
+            "label": "子 Agent A 继承的检查要求",
             "experiment": "16-agent-a",
             "stage": 1,
-            "view": "request"
+            "view": "request",
+            "input": 18,
+            "content": 0
           },
           {
-            "label": "子 Agent B 首次正式请求",
+            "label": "子 Agent B 继承的检查要求",
             "experiment": "16-agent-b",
             "stage": 1,
-            "view": "request"
+            "view": "request",
+            "input": 18,
+            "content": 0
           }
         ]
       }
@@ -516,25 +551,39 @@
             "label": "原生 Goal",
             "experiment": "17-goal",
             "stage": 0,
-            "view": "request"
+            "view": "request",
+            "input": 0,
+            "content": 0
           },
           {
             "label": "普通任务文字进度",
             "experiment": "plan-status",
             "stage": 0,
-            "view": "request"
+            "view": "request",
+            "input": 0,
+            "content": 0
           },
           {
             "label": "中断后续跑",
             "experiment": "20-resume",
             "stage": 0,
-            "view": "request"
+            "view": "request",
+            "input": 0
+          },
+          {
+            "label": "续跑时的新要求",
+            "experiment": "20-resume",
+            "stage": 0,
+            "view": "request",
+            "input": 2,
+            "content": 0
           },
           {
             "label": "后台命令回收",
             "experiment": "background-return",
-            "stage": 0,
-            "view": "request"
+            "stage": 5,
+            "view": "request",
+            "input": 0
           }
         ]
       }

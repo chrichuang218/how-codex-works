@@ -81,6 +81,61 @@ function sampleDates(lesson) {
   const dates = experiments.filter(experiment => lesson.evidenceIds.includes(experiment.id)).flatMap(experiment => experiment.stages.map(stage => stage.requestTimestamp?.slice(0, 10)).filter(Boolean)).sort();
   return dates.length ? dates[0] === dates.at(-1) ? dates[0] : `${dates[0]} 至 ${dates.at(-1)}` : '日期未记录';
 }
+function nonnegativeInteger(value) {
+  if (value === null || value === undefined || String(value).trim() === '') return undefined;
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number >= 0 ? number : undefined;
+}
+function initialWorkbenchPosition(lesson, experimentId) {
+  const target = (lesson.readingGuide?.targets || []).find(item => !experimentId || item.experiment === experimentId);
+  const experiment = experiments.find(item => item.id === (target?.experiment || experimentId || lesson.evidenceIds[0]));
+  return {
+    experimentId: experiment.id,
+    stage: Math.min(nonnegativeInteger(target?.stage) ?? Math.max(0, experiment.stages.findIndex(stage => !stage.prewarm)), experiment.stages.length - 1),
+    view: target?.view || 'request',
+    rawKind: target?.kind || 'requestFile',
+    explicitFocus: null,
+  };
+}
+function workbenchHref(state) {
+  const extra = state.view === 'raw' ? { kind: state.rawKind } : state.view === 'request' ? state.explicitFocus || {} : {};
+  return evidenceHref(state.lessonId, state.experimentId, state.stage, state.view, extra);
+}
+const isToolResult = item => /^(custom_tool_call_output|function_call_output|tool_call_output)$/.test(item.type || '');
+function validInputFocus(focus, inputs) {
+  if (!focus) return null;
+  const input = nonnegativeInteger(focus.input);
+  if (input === undefined || !inputs[input]) return null;
+  if (focus.content === undefined) return { input };
+  const content = nonnegativeInteger(focus.content);
+  return content !== undefined && Array.isArray(inputs[input].content) && content < inputs[input].content.length ? { input, content } : null;
+}
+function requestFocus(request, state) {
+  const inputs = Array.isArray(request.input) ? request.input : [];
+  state.explicitFocus = validInputFocus(state.explicitFocus, inputs);
+  if (state.explicitFocus) return [state.explicitFocus];
+  const targets = (catalog.lessons.find(lesson => lesson.id === state.lessonId).readingGuide?.targets || [])
+    .filter(target => target.experiment === state.experimentId && target.stage === state.stage && target.view === 'request')
+    .map(target => validInputFocus(target, inputs)).filter(Boolean);
+  if (targets.length) return targets;
+  if (inputs.length && inputs.every(isToolResult)) return inputs.map((_, input) => ({ input }));
+  const normalize = text => String(text || '').replace(/\r\n?/g, '\n').trim();
+  const prompt = normalize(experiments.find(experiment => experiment.id === state.experimentId).prompt);
+  if (!prompt) return [];
+  const input = inputs.findLastIndex(item => item.role === 'user' && Array.isArray(item.content) && item.content.some(block => normalize(block.text) === prompt));
+  return input < 0 ? [] : [{ input, content: inputs[input].content.findLastIndex(block => normalize(block.text) === prompt) }];
+}
+function openRequestFocus(host, focus) {
+  for (const target of focus) {
+    const item = host.querySelector(`[data-item-path="input[${target.input}]"]`);
+    if (!item) continue;
+    item.open = true;
+    if (target.content !== undefined) {
+      const block = item.querySelector(`[data-content-path="input[${target.input}].content[${target.content}]"]`);
+      if (block) block.open = true;
+    }
+  }
+}
 
 function loadFile(path) {
   if (!files['../' + path]) return Promise.reject(new Error('未找到公开文件：' + path));
@@ -138,11 +193,11 @@ function toolsMarkup(tools, path) {
 }
 function itemMarkup(item, prefix, index, output = false) {
   const path = `${prefix}[${index}]`;
-  const shortMessage = item.type === 'message' && Array.isArray(item.content) && item.content.every(block => (block.text || '').length < 300);
-  const isResult = /tool_call_output|function_call_output/.test(item.type || '');
+  const isResult = isToolResult(item);
   const isCall = /tool_call$|function_call$/.test(item.type || '');
+  const open = output && (item.type === 'message' || isCall);
   let body = '';
-  if (has(item, 'content')) body += contentBlocks(item.content, path + '.content', output || shortMessage);
+  if (has(item, 'content')) body += contentBlocks(item.content, path + '.content', open);
   if (has(item, 'tools')) body += toolsMarkup(item.tools, path + '.tools');
   for (const key of ['input', 'arguments', 'output']) if (has(item, key)) {
     body += codePanel(typeof item[key] === 'string' ? item[key] : json(item[key]), `${path}.${key} · 完整字段`, `data-value-path="${path}.${key}"`);
@@ -150,14 +205,14 @@ function itemMarkup(item, prefix, index, output = false) {
   const visibleMetadata = Object.fromEntries(['name', 'namespace', 'call_id', 'id', 'status', 'phase'].filter(key => has(item, key)).map(key => [key, item[key]]));
   if (Object.keys(visibleMetadata).length) body = metadata(visibleMetadata) + body;
   if (!body) body = codePanel(json(item), path + ' · 完整项目');
-  return `<details class="trace-item" data-item-path="${path}" ${output || shortMessage || isResult ? 'open' : ''}><summary><code>${path}</code><span class="role-badge">${esc(item.role || '无 role 字段')}</span><strong>${esc(item.type || '未标注 type')}</strong><span class="item-description">${isResult ? '工具返回结果' : isCall ? '模型提出的调用' : item.type === 'additional_tools' ? '可用工具定义' : Array.isArray(item.content) ? item.content.length + ' 个内容块' : ''}</span></summary><div class="trace-item-body">${body}${rawDetails(item, '查看这个项目的完整原始 JSON')}</div></details>`;
+  return `<details class="trace-item" data-item-path="${path}" ${open ? 'open' : ''}><summary><code>${path}</code><span class="role-badge">${esc(item.role || '无 role 字段')}</span><strong>${esc(item.type || '未标注 type')}</strong><span class="item-description">${isResult ? '工具返回结果' : isCall ? '模型提出的调用' : item.type === 'additional_tools' ? '可用工具定义' : Array.isArray(item.content) ? item.content.length + ' 个内容块' : ''}</span></summary><div class="trace-item-body">${body}${rawDetails(item, '查看这个项目的完整原始 JSON')}</div></details>`;
 }
 function requestMarkup(request) {
   const input = request.input;
   const toolPaths = (Array.isArray(input) ? input : []).flatMap((item, index) => has(item, 'tools') ? [`input[${index}].tools`] : []);
   if (has(request, 'tools')) toolPaths.unshift('tools');
   const top = Object.fromEntries(Object.entries(request).filter(([key]) => key !== 'input'));
-  return `<div class="request-intro"><p>输入按原数组顺序排列。展开可查看 <code>role</code>、内容块和工具结果；复制按钮复制完整字段。</p><p>工具定义位置：${toolPaths.length ? toolPaths.map(path => `<code>${path}</code>`).join('、') : '本次请求未包含工具定义'}。顶层 <code>instructions</code>：${has(request, 'instructions') ? '存在（下方可展开）' : '不存在'}。</p></div>${has(request, 'instructions') ? codePanel(typeof request.instructions === 'string' ? request.instructions : json(request.instructions), '顶层 instructions · 完整内容') : ''}${has(request, 'tools') ? toolsMarkup(request.tools, 'tools') : ''}<div class="input-actions"><strong>input · ${Array.isArray(input) ? input.length : '非数组'} 项</strong><button data-expand-inputs>展开全部输入与内容块</button><button data-collapse-inputs>收起长文本</button></div>${Array.isArray(input) ? input.map((item, index) => itemMarkup(item, 'input', index)).join('') : codePanel(json(input), '完整 input 字段')}${rawDetails(top, '查看所有请求级字段（input 已在上方逐项展示）')}`;
+  return `<div class="request-intro"><p>输入按原数组顺序排列。展开可查看 <code>role</code>、内容块和工具结果；复制按钮复制完整字段。</p><p>工具定义位置：${toolPaths.length ? toolPaths.map(path => `<code>${path}</code>`).join('、') : '本次请求未包含工具定义'}。顶层 <code>instructions</code>：${has(request, 'instructions') ? '存在（下方可展开）' : '不存在'}。</p></div>${has(request, 'instructions') ? codePanel(typeof request.instructions === 'string' ? request.instructions : json(request.instructions), '顶层 instructions · 完整内容') : ''}${has(request, 'tools') ? toolsMarkup(request.tools, 'tools') : ''}<div class="input-actions"><strong>input · ${Array.isArray(input) ? input.length : '非数组'} 项</strong><button data-expand-inputs>展开全部输入与内容块</button><button data-collapse-inputs>收起全部输入</button></div>${Array.isArray(input) ? input.map((item, index) => itemMarkup(item, 'input', index)).join('') : codePanel(json(input), '完整 input 字段')}${rawDetails(top, '查看所有请求级字段（input 已在上方逐项展示）')}`;
 }
 function outputMarkup(derived, completed) {
   const items = derived?.items || completed?.response?.output || [];
@@ -210,8 +265,8 @@ function shell() {
     const host = event.target.closest('[data-workbench]');
     if (!host) return;
     const state = states.get(host.dataset.workbench);
-    if (event.target.matches('.experiment-select')) { state.experimentId = event.target.value; state.stage = 0; state.view = 'request'; updateWorkbenchChrome(state); renderWorkbench(state); }
-    if (event.target.matches('.stage-select')) { state.stage = Number(event.target.value); updateWorkbenchChrome(state); renderWorkbench(state); }
+    if (event.target.matches('.experiment-select')) { Object.assign(state, initialWorkbenchPosition(catalog.lessons.find(lesson => lesson.id === state.lessonId), event.target.value)); renderWorkbench(state); }
+    if (event.target.matches('.stage-select')) { state.stage = Number(event.target.value); state.explicitFocus = null; renderWorkbench(state); }
     if (event.target.matches('.raw-select')) { state.rawKind = event.target.value; renderWorkbench(state); }
   });
   document.addEventListener('keydown', event => {
@@ -368,8 +423,7 @@ async function ensurePage(lesson) {
     page.append(template.content);
     document.querySelector('#lesson-content').append(page);
     if (lesson.id !== 'introduction') {
-      const experiment = experiments.find(item => item.id === lesson.evidenceIds[0]);
-      const state = { lessonId: lesson.id, experimentId: experiment.id, stage: Math.max(0, experiment.stages.findIndex(stage => !stage.prewarm)), view: 'request', rawKind: 'requestFile', loaded: false, version: 0 };
+      const state = { lessonId: lesson.id, ...initialWorkbenchPosition(lesson), loaded: false, version: 0 };
       states.set(lesson.id, state); updateWorkbenchChrome(state);
       evidenceObserver.observe(page.querySelector('[data-workbench]'));
     }
@@ -473,6 +527,7 @@ function updateWorkbenchChrome(state) {
 }
 async function renderWorkbench(state, updateUrl = true) {
   const version = ++state.version;
+  const expectedRoute = routeNumber;
   state.loaded = true;
   const host = document.querySelector(`[data-workbench="${state.lessonId}"]`);
   const experiment = experiments.find(item => item.id === state.experimentId);
@@ -482,14 +537,13 @@ async function renderWorkbench(state, updateUrl = true) {
   host.setAttribute('aria-busy', 'true');
   releaseCopies(content);
   content.innerHTML = '<p class="loading-state">正在加载本次证据…</p>';
-  if (updateUrl) history.replaceState(null, '', evidenceHref(state.lessonId, experiment.id, state.stage, state.view, state.view === 'raw' ? { kind: state.rawKind } : {}));
   try {
     const [request, completed, derived] = await Promise.all([loadJson(stage.requestFile), loadJson(stage.responseFile), stage.outputItemsFile ? loadJson(stage.outputItemsFile) : null]);
     if (version !== state.version) return;
     const response = completed.response || completed;
     const next = experiments.flatMap(item => item.stages.map((nextStage, index) => ({ experiment: item, stage: nextStage, index }))).filter(item => item.stage.previousResponseId === stage.responseId);
     host.querySelector('.request-metadata').innerHTML = `<p class="sample-scope">样本：${esc(stage.requestTimestamp?.slice(0, 10) || '日期未记录')} · 模型标识：${esc(request.model)}<br>本记录仅说明当时配置下的行为；未记录的客户端版本不作推测。<a href="${esc(href(state.lessonId, { file: `evidence/desktop-lab/${experiment.id}/manifest.json` }))}">查看实验来源</a></p><details><summary>样本与响应信息</summary><dl><div><dt>请求时间</dt><dd>${esc(stage.requestTimestamp)}</dd></div><div><dt>model / generate</dt><dd><code>${esc(request.model)}</code> / ${has(request, 'generate') ? esc(request.generate) : '未显式设置'}</dd></div><div><dt>previous_response_id</dt><dd>${responseLink(request.previous_response_id, state.lessonId)}</dd></div><div><dt>本次 response.id</dt><dd><code>${esc(response.id || stage.responseId)}</code></dd></div><div><dt>后续响应引用</dt><dd>${next.length ? next.map(item => responseLink(item.stage.responseId, state.lessonId, item.experiment.id + ' / ' + item.stage.id)).join(' · ') : '当前记录中没有直接引用；后续上下文也可能通过历史重发接续。'}</dd></div></dl></details>`;
-    if (state.view === 'request') content.innerHTML = requestMarkup(request);
+    if (state.view === 'request') { content.innerHTML = requestMarkup(request); openRequestFocus(content, requestFocus(request, state)); }
     else if (state.view === 'output') content.innerHTML = outputMarkup(derived, completed);
     else if (state.view === 'calls') {
       const markup = await callsMarkup(state, request, derived?.items || []);
@@ -508,7 +562,10 @@ async function renderWorkbench(state, updateUrl = true) {
       if (version !== state.version) return;
       content.innerHTML = `<div class="raw-controls"><label>原始文件 <select class="raw-select" aria-label="选择原始记录">${available.map(([kind, label]) => `<option value="${kind}" ${kind === state.rawKind ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button data-download="${esc(selected[2])}">下载文件 ↓</button></div><p class="source-path">${esc(selected[2])}</p><p class="field-note">${state.rawKind === 'outputItemsFile' ? '这是从流式事件提取的衍生输出项；原完成事件保留原样。' : state.rawKind === 'responseFile' && experiment.status === 'interrupted' ? '本轮用户任务已中断。这里的 response.completed 只证明对应模型响应结束。' : '公开快照已脱敏，完整内容如下；处理方式见实验来源说明。'}</p>${codePanel(text, selected[1] + ' · 文件全文', 'data-raw-content')}`;
     }
-    if (version === state.version) { host.setAttribute('aria-busy', 'false'); host.dataset.ready = 'true'; }
+    if (version === state.version) {
+      if (updateUrl && expectedRoute === routeNumber && activeLesson === state.lessonId) history.replaceState(null, '', workbenchHref(state));
+      host.setAttribute('aria-busy', 'false'); host.dataset.ready = 'true';
+    }
   } catch (error) {
     if (version !== state.version) return;
     console.error('证据加载失败', error);
@@ -536,16 +593,17 @@ async function buildRelations() {
 async function callsMarkup(state, request, output) {
   const registry = await buildRelations();
   const calls = output.filter(item => item.call_id && /call$/.test(item.type || ''));
-  const inputs = (request.input || []).filter(item => item.call_id && /call_output$/.test(item.type || ''));
+  const inputs = (request.input || []).filter(item => item.call_id && isToolResult(item));
   const ids = [...new Set([...calls, ...inputs].map(item => item.call_id))];
+  const focusedIds = new Set((calls.length ? calls : inputs).map(item => item.call_id));
   return `<p class="evidence-notice">用 <code>call_id</code> 对应模型调用与后续请求中的返回。同一结果多次发送时分别列出；外层脚本中的各条语句不单列为模型调用。</p>${ids.length ? ids.map(id => {
     const matches = registry.get(id) || { calls: [], results: [] };
-    return `<section class="call-pair"><h4><code>${esc(id)}</code></h4><h5>模型提出的调用</h5>${matches.calls.length ? matches.calls.map(item => relatedItem(item, state, 'output')).join('') : '<p>输出项中未找到调用来源。</p>'}<h5>交回模型的结果</h5>${matches.results.length ? matches.results.map(item => relatedItem(item, state, 'request')).join('') : '<p>记录中未找到对应结果，尚不能确认执行成功。</p>'}</section>`;
+    return `<section class="call-pair"><h4><code>${esc(id)}</code></h4><h5>模型提出的调用</h5>${matches.calls.length ? matches.calls.map(item => relatedItem(item, state, 'output', focusedIds.has(id))).join('') : '<p>输出项中未找到调用来源。</p>'}<h5>交回模型的结果</h5>${matches.results.length ? matches.results.map(item => relatedItem(item, state, 'request', focusedIds.has(id))).join('') : '<p>记录中未找到对应结果，尚不能确认执行成功。</p>'}</section>`;
   }).join('') : '<p class="empty-state">这个阶段没有提出新的工具调用，也没有输入工具结果。可选择前后请求继续观察。</p>'}`;
 }
-function relatedItem(item, state, view) {
+function relatedItem(item, state, view, open) {
   const lesson = preferredLesson(item.experiment.id, state.lessonId);
-  return `<details class="related-item" open><summary>${esc(item.experiment.id)} / ${esc(item.stage.id)} · ${esc(item.item.name || item.item.type)}</summary><a class="related-source" href="${evidenceHref(lesson.id, item.experiment.id, item.index, view, { input: view === 'request' ? item.itemIndex : undefined })}">跳到对应${view === 'request' ? '请求输入' : '模型输出'} →</a>${codePanel(json(item.item), view === 'request' ? '完整工具结果项目' : '完整调用项目', `data-call-item="${esc(item.item.call_id)}"`)}</details>`;
+  return `<details class="related-item" ${open ? 'open' : ''}><summary>${esc(item.experiment.id)} / ${esc(item.stage.id)} · ${esc(item.item.name || item.item.type)}</summary><a class="related-source" href="${evidenceHref(lesson.id, item.experiment.id, item.index, view, { input: view === 'request' ? item.itemIndex : undefined })}">跳到对应${view === 'request' ? '请求输入' : '模型输出'} →</a>${codePanel(json(item.item), view === 'request' ? '完整工具结果项目' : '完整调用项目', `data-call-item="${esc(item.item.call_id)}"`)}</details>`;
 }
 async function openSupplement(lessonId, path) {
   const expectedRoute = routeNumber;
@@ -614,9 +672,9 @@ async function handleClick(event) {
   const button = event.target.closest('button');
   if (!button) return;
   if (button.dataset.view) { state.view = button.dataset.view; await renderWorkbench(state); }
-  else if (button.hasAttribute('data-stage-prev')) { state.stage--; await renderWorkbench(state); }
-  else if (button.hasAttribute('data-stage-next')) { state.stage++; await renderWorkbench(state); }
-  else if (button.hasAttribute('data-share')) await copyText(new URL(evidenceHref(state.lessonId, state.experimentId, state.stage, state.view, state.view === 'raw' ? { kind: state.rawKind } : {}), location.href).href);
+  else if (button.hasAttribute('data-stage-prev')) { state.stage--; state.explicitFocus = null; await renderWorkbench(state); }
+  else if (button.hasAttribute('data-stage-next')) { state.stage++; state.explicitFocus = null; await renderWorkbench(state); }
+  else if (button.hasAttribute('data-share')) await copyText(new URL(workbenchHref(state), location.href).href);
   else if (button.matches('.load-evidence')) await renderWorkbench(state);
   else if (button.hasAttribute('data-expand-inputs')) host.querySelectorAll('.trace-item,.content-block').forEach(details => details.open = true);
   else if (button.hasAttribute('data-collapse-inputs')) host.querySelectorAll('.trace-item,.content-block').forEach(details => details.open = false);
@@ -719,15 +777,18 @@ async function route() {
     const experiment = experiments.find(item => item.id === params.get('experiment'));
     if (!experiment) { showToast('未找到该实验记录。'); return; }
     state.experimentId = experiment.id;
-    state.stage = Math.max(0, Math.min(Number(params.get('stage')) || 0, experiment.stages.length - 1));
+    state.stage = Math.min(nonnegativeInteger(params.get('stage')) ?? 0, experiment.stages.length - 1);
     state.view = ['request', 'output', 'calls', 'compare', 'raw'].includes(params.get('view')) ? params.get('view') : 'request';
     state.rawKind = params.get('kind') || 'requestFile';
+    const input = nonnegativeInteger(params.get('input'));
+    const content = nonnegativeInteger(params.get('content'));
+    state.explicitFocus = state.view === 'request' && input !== undefined && (!params.has('content') || content !== undefined) ? { input, ...(content === undefined ? {} : { content }) } : null;
     await renderWorkbench(state, false);
     if (currentRoute !== routeNumber) return;
     const host = document.querySelector(`[data-workbench="${id}"]`);
-    if (params.has('input')) {
-      const item = host.querySelector(`[data-item-path="input[${Number(params.get('input'))}]"]`);
-      if (item) { item.open = true; if (params.has('content')) { const block = item.querySelector(`[data-content-path="input[${Number(params.get('input'))}].content[${Number(params.get('content'))}]"]`); if (block) block.open = true; } revealSection(item); return; }
+    if (state.explicitFocus) {
+      const item = host.querySelector(`[data-item-path="input[${state.explicitFocus.input}]"]`);
+      if (item) { revealSection(item); return; }
     }
     revealSection(host); return;
   }

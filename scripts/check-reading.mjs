@@ -164,7 +164,159 @@ export async function checkReaderLayout(page, url, label = 'local') {
   console.log(`Reader layout checks passed (${label}): ${cases.length} chapter/guide scenarios at 2560px, 1440px and 390px, normal/focus mode; shared outer left edge; no needless table scrollbars or page overflow; same-page timeline/external GitHub links; 375px/390px/320px header and term bounds, scrolling and Escape focus.`);
 }
 
+export async function checkWorkbenchDefaults(page, url, label = 'local') {
+  const { experiments } = JSON.parse(await readFile('evidence/desktop-lab/index.json', 'utf8'));
+  const context = await page.context().browser().newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce', permissions: ['clipboard-read', 'clipboard-write'] });
+  const probe = await context.newPage(), records = [], errors = [];
+  probe.on('pageerror', error => errors.push(error.message));
+  probe.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  probe.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`); });
+  const sources = async (id, index) => {
+    const experiment = experiments.find(item => item.id === id), stage = experiment.stages[index];
+    return { experiment, stage, request: JSON.parse(await readFile(stage.requestFile, 'utf8')), output: JSON.parse(await readFile(stage.outputItemsFile, 'utf8')).items };
+  };
+  const ready = async (lesson, expected) => {
+    await probe.waitForFunction(({ lesson, expected }) => {
+      const host = document.querySelector(`[data-workbench="${lesson}"]`);
+      return host?.dataset.ready === 'true' && host.getAttribute('aria-busy') === 'false' && (!expected || Object.entries(expected).every(([key, value]) => host.dataset[key] === String(value)));
+    }, { lesson, expected });
+    return probe.locator(`[data-workbench="${lesson}"]`);
+  };
+  const open = async (lesson, params = {}) => {
+    await probe.goto(url + route(lesson, params)); await settled(probe, lesson);
+    await probe.locator(`[data-workbench="${lesson}"]`).scrollIntoViewIfNeeded();
+    return ready(lesson);
+  };
+  const opened = host => host.evaluate(node => ({
+    items: [...node.querySelectorAll('.trace-item[open]')].map(item => item.dataset.itemPath),
+    content: [...node.querySelectorAll('.content-block[open]')].map(item => item.dataset.contentPath),
+  }));
+  const expectOpen = async (host, items, content, message) => assert.deepEqual(await opened(host), { items, content }, message);
+  async function verifyItems(host, expected, prefix) {
+    const rendered = await host.locator(`.trace-item[data-item-path^="${prefix}["]`).evaluateAll(nodes => nodes.map(node => ({
+      original: JSON.parse(node.querySelector(':scope > .trace-item-body > .raw-details pre').textContent),
+      content: [...node.querySelectorAll('[data-full-content]')].map(block => block.textContent),
+    })));
+    assert.deepEqual(rendered.map(item => item.original), expected, prefix + ': folding must preserve complete original objects and order');
+    expected.forEach((item, index) => assert.deepEqual(rendered[index].content, (item.content || []).map(block => typeof block.text === 'string' ? block.text : JSON.stringify(block, null, 2)), prefix + ': complete content text changed'));
+  }
+  async function verifyCalls(host, request, output) {
+    const calls = output.filter(item => /call$/.test(item.type || '') && item.call_id);
+    const incoming = request.input.filter(item => /call_output$/.test(item.type || '') && item.call_id);
+    const focused = new Set((calls.length ? calls : incoming).map(item => item.call_id));
+    const pairs = await host.locator('.call-pair').evaluateAll(nodes => nodes.map(node => ({ id: node.querySelector('h4 code').textContent, open: [...node.querySelectorAll('.related-item')].map(item => item.open) })));
+    assert.deepEqual(pairs.map(pair => pair.id).sort(), [...new Set([...calls, ...incoming].map(item => item.call_id))].sort(), 'Calls view must render every current call/result identity exactly once');
+    for (const pair of pairs) assert.ok(pair.open.length && pair.open.every(value => value === focused.has(pair.id)), pair.id + ': current calls/results should open and historical pairs should close');
+    return pairs;
+  }
+  const fixedDefaults = {
+    '01-request': ['01-hello', 1, 'request'], '08-memory': ['12-memory-read', 1, 'request'],
+    '09-mcp': ['13-mcp', 2, 'request'], '14-streaming': ['07-fix', 4, 'raw'], '15-architecture': ['07-fix', 2, 'output'],
+  };
+  try {
+    await mkdir('work', { recursive: true });
+    for (const lesson of catalog.lessons) {
+      const target = lesson.readingGuide.targets[0], host = await open(lesson.id);
+      const actual = await host.evaluate(node => ({ experiment: node.dataset.experiment, stage: Number(node.dataset.stage), view: node.dataset.view }));
+      records.push({ lesson: lesson.id, ...actual, ...await opened(host) });
+      assert.deepEqual(actual, { experiment: target.experiment, stage: target.stage, view: target.view }, lesson.id + ': default must follow the teaching target');
+      if (fixedDefaults[lesson.id]) assert.deepEqual(Object.values(actual), fixedDefaults[lesson.id], lesson.id + ': the chapter must retain its intended evidence entry');
+      const source = await sources(actual.experiment, actual.stage);
+      assert.ok(!source.stage.prewarm, lesson.id + ': a normal chapter entry must not start on prewarm');
+      if (actual.view === 'request') {
+        const targets = lesson.readingGuide.targets.filter(item => item.experiment === actual.experiment && item.stage === actual.stage && item.view === 'request' && item.input !== undefined);
+        assert.ok(targets.length, lesson.id + ': curated default inputs need an explicit target');
+        const inputs = [...new Set(targets.map(item => item.input))].sort((a, b) => a - b).map(index => `input[${index}]`);
+        const content = targets.filter(item => item.content !== undefined).sort((a, b) => a.input - b.input || a.content - b.content).map(item => `input[${item.input}].content[${item.content}]`);
+        await expectOpen(host, inputs, [...new Set(content)], lesson.id + ': only curated request inputs/content should open');
+        await verifyItems(host, source.request.input, 'input');
+        if (lesson.id === '01-request') await expectOpen(host, ['input[5]', 'input[6]'], ['input[5].content[1]', 'input[6].content[0]'], 'The first chapter compares context with the user greeting, not input[4] orchestration');
+        if (['08-memory', '09-mcp'].includes(lesson.id)) await expectOpen(host, ['input[0]'], [], lesson.id + ': the observed tool result is the entry point');
+      } else if (actual.view === 'output') {
+        const visible = source.output.flatMap((item, index) => item.type === 'message' || /call$/.test(item.type || '') ? [index] : []);
+        await expectOpen(host, visible.map(index => `output[${index}]`), visible.flatMap(index => (source.output[index].content || []).map((_, block) => `output[${index}].content[${block}]`)), lesson.id + ': reasoning must stay folded while messages/calls open');
+        await verifyItems(host, source.output, 'output');
+      } else if (actual.view === 'calls') await verifyCalls(host, source.request, source.output);
+      else {
+        assert.equal(await host.locator('.raw-select').inputValue(), 'eventsFile', 'The streaming chapter starts with actual streamed events');
+        assert.equal(await host.locator('[data-raw-content]').textContent(), await readFile(source.stage.eventsFile, 'utf8'));
+      }
+    }
+    // A fresh home entry must use the same two-input comparison, not treat the
+    // first target as an explicit one-input bookmark.
+    await probe.goto(url); await probe.reload(); await probe.locator('[data-hello-request]').click();
+    let host = await ready('01-request', { experiment: '01-hello', stage: 1, view: 'request' });
+    await expectOpen(host, ['input[5]', 'input[6]'], ['input[5].content[1]', 'input[6].content[0]'], 'The home request entry must share chapter defaults');
+    await host.locator('[data-content-path="input[5].content[1]"] > summary').click();
+    await host.locator('[data-item-path="input[5]"] > summary').click();
+    await host.locator('[data-item-path="input[4]"] > summary').click();
+    await host.locator('[data-content-path="input[4].content[0]"] > summary').click();
+    const manual = await opened(host);
+    assert.deepEqual(manual, { items: ['input[4]', 'input[6]'], content: ['input[4].content[0]', 'input[6].content[0]'] }, 'Manual clicks must actually open input[4] and close input[5]');
+    await probe.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
+    await probe.waitForFunction(() => scrollY === 0); await host.scrollIntoViewIfNeeded();
+    await probe.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.deepEqual(await opened(host), manual, 'Scrolling must not replace the reader\'s manual disclosure choices');
+    await probe.screenshot({ path: `work/workbench-manual-disclosure-${label}.png`, animations: 'disabled' });
+
+    host = await open('01-request', { experiment: '01-hello', stage: '1', view: 'request', input: '4', content: '0' });
+    await expectOpen(host, ['input[4]'], ['input[4].content[0]'], 'Explicit bookmarks take priority over chapter defaults');
+    for (const view of ['output', 'request']) { await host.locator(`[data-view="${view}"]`).click(); host = await ready('01-request', { view }); }
+    await expectOpen(host, ['input[4]'], ['input[4].content[0]'], 'Returning to request view must retain explicit focus');
+    await host.locator('[data-share]').click();
+    const share = await probe.evaluate(() => navigator.clipboard.readText());
+    const shareParams = new URLSearchParams(share.split('?')[1]);
+    assert.equal(shareParams.get('input'), '4'); assert.equal(shareParams.get('content'), '0');
+    await probe.reload(); host = await ready('01-request', { experiment: '01-hello', stage: 1, view: 'request' });
+    await expectOpen(host, ['input[4]'], ['input[4].content[0]'], 'Refreshing a shared input/content bookmark must keep its exact focus');
+    await verifyItems(host, (await sources('01-hello', 1)).request.input, 'input');
+    host = await open('01-request', { experiment: '01-hello', stage: '1', view: 'request', input: '5' });
+    await expectOpen(host, ['input[5]'], [], 'An input-only bookmark must not inherit a curated content block');
+
+    host = await open('03-agent-loop', { experiment: '07-fix', stage: '0', view: 'request', input: '0', content: '0' });
+    await expectOpen(host, ['input[0]'], ['input[0].content[0]'], 'Zero is a valid explicit input and content index');
+    await host.locator('[data-share]').click();
+    const zeroShare = new URLSearchParams((await probe.evaluate(() => navigator.clipboard.readText())).split('?')[1]);
+    assert.equal(zeroShare.get('input'), '0'); assert.equal(zeroShare.get('content'), '0');
+    await host.locator('.stage-select').selectOption('1'); host = await ready('03-agent-loop', { stage: 1, view: 'request' });
+    await expectOpen(host, ['input[0]'], [], 'A pure tool-return request opens its result after clearing old content focus');
+    assert.equal(new URLSearchParams(probe.url().split('?')[1]).has('input'), false, 'Changing stages must clear explicit focus');
+    await host.locator('[data-view="calls"]').click(); host = await ready('03-agent-loop', { stage: 1, view: 'calls' });
+    let source = await sources('07-fix', 1);
+    const pairs = await verifyCalls(host, source.request, source.output);
+    assert.ok(pairs.some(pair => pair.open.every(Boolean)) && pairs.some(pair => pair.open.every(value => !value)), 'The fixture must compare a new call with an older incoming result');
+    await host.locator('.stage-select').selectOption('2'); host = await ready('03-agent-loop', { stage: 2, view: 'calls' });
+    source = await sources('07-fix', 2); await verifyCalls(host, source.request, source.output);
+    host = await open('09-mcp', { experiment: '13-mcp', stage: '2', view: 'calls' });
+    source = await sources('13-mcp', 2); assert.equal(source.output.some(item => /call$/.test(item.type || '')), false);
+    await verifyCalls(host, source.request, source.output);
+
+    host = await open('05-context', { experiment: '10-compaction', stage: '0', view: 'request' });
+    await expectOpen(host, [], [], 'Mixed history without a matching target or prompt must not guess which tools/messages to expand');
+    await verifyItems(host, (await sources('10-compaction', 0)).request.input, 'input');
+    host = await open('08-memory');
+    await host.locator('.experiment-select').selectOption('12-memory-write'); host = await ready('08-memory', { experiment: '12-memory-write', stage: 0, view: 'request' });
+    await expectOpen(host, ['input[0]'], ['input[0].content[0]'], 'An untargeted experiment falls back to its exact user prompt');
+    const promptSource = await sources('12-memory-write', 0);
+    assert.equal(promptSource.request.input[0].role, 'user');
+    assert.equal(promptSource.request.input[0].content[0].text.trim(), promptSource.experiment.prompt.trim());
+    host = await open('12-multi-agent');
+    for (const experiment of ['16-agent-a', '16-agent-b']) {
+      await host.locator('.experiment-select').selectOption(experiment); host = await ready('12-multi-agent', { experiment, stage: 1, view: 'request' });
+      assert.ok(!(await sources(experiment, 1)).stage.prewarm);
+      await expectOpen(host, ['input[18]'], ['input[18].content[0]'], experiment + ': switching experiments must skip prewarm and reveal the inherited task');
+    }
+    assert.deepEqual(errors, [], 'Workbench defaults caused browser/resource failures');
+    console.log(`Workbench defaults passed (${label}): 16 semantic chapter entries; first chapter/home comparison; explicit/zero-index share and refresh; manual disclosure persistence; prompt/mixed-history/pure-result cases; current versus historical calls; non-prewarm experiment switching; complete source objects/text.`);
+  } finally {
+    await mkdir('work', { recursive: true });
+    await writeFile(`work/workbench-defaults-${label}.json`, JSON.stringify({ url, records, errors }, null, 2) + '\n');
+    await context.close();
+  }
+}
+
 export async function checkReading(page, url, label = 'local') {
+  await checkWorkbenchDefaults(page, url, label);
   await checkReaderLayout(page, url, label);
   await mkdir('work', { recursive: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
@@ -391,7 +543,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   page.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`); });
   page.on('requestfailed', request => errors.push(`${request.failure()?.errorText}: ${request.url()}`));
   try {
-    const check = process.argv.includes('--diagram-only') ? checkDiagramReentry : process.argv.includes('--layout-only') ? checkReaderLayout : checkReading;
+    const check = process.argv.includes('--workbench-only') ? checkWorkbenchDefaults : process.argv.includes('--diagram-only') ? checkDiagramReentry : process.argv.includes('--layout-only') ? checkReaderLayout : checkReading;
     await check(page, url.endsWith('/') ? url : url + '/', 'live');
     assert.deepEqual(errors, [], 'Published reader has console or resource failures');
   } catch (error) {
