@@ -2,9 +2,19 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { indexPassages, searchPassages, highlightPassage, glossaryEntries, annotateTerms } from './reader.js';
 import './style.css';
+import './theme.css';
 import brandIcon from './assets/codex-assistant.svg';
 
-const files = import.meta.glob(['../GLOSSARY.md', '../course/**/*.md', '../course/**/*.json', '../evidence/desktop-lab/**/*.json', '../evidence/desktop-lab/**/*.jsonl', '../evidence/desktop-lab/**/*.md', '../evidence/desktop-lab/**/*.txt'], { query: '?raw', import: 'default' });
+// Course text is bundled; evidence is published as the original files and fetched on demand,
+// so large logs stay byte-for-byte downloadable instead of becoming JavaScript chunks.
+const evidenceUrls = import.meta.glob(['../evidence/desktop-lab/**/*.json', '../evidence/desktop-lab/**/*.jsonl', '../evidence/desktop-lab/**/*.md', '../evidence/desktop-lab/**/*.txt'], { query: '?url', import: 'default', eager: true });
+const files = {
+  ...import.meta.glob(['../GLOSSARY.md', '../course/**/*.md', '../course/**/*.json'], { query: '?raw', import: 'default' }),
+  ...Object.fromEntries(Object.entries(evidenceUrls).map(([path, url]) => [path, () => fetch(url).then(response => {
+    if (!response.ok) throw new Error('公开文件加载失败：' + path.slice(3));
+    return response.text();
+  })])),
+};
 const images = import.meta.glob('../docs/images/**/*.{png,jpg,jpeg,webp,svg}', { query: '?url', import: 'default', eager: true });
 const repo = 'https://github.com/chrichuang218/how-codex-works';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
@@ -136,11 +146,11 @@ function openRequestFocus(host, focus) {
 
 function loadFile(path) {
   if (!files['../' + path]) return Promise.reject(new Error('未找到公开文件：' + path));
-  if (!fileCache.has(path)) fileCache.set(path, files['../' + path]());
+  if (!fileCache.has(path)) fileCache.set(path, files['../' + path]().catch(error => { fileCache.delete(path); throw error; }));
   return fileCache.get(path);
 }
 async function loadJson(path) {
-  if (!jsonCache.has(path)) jsonCache.set(path, loadFile(path).then(JSON.parse));
+  if (!jsonCache.has(path)) jsonCache.set(path, loadFile(path).then(JSON.parse).catch(error => { jsonCache.delete(path); throw error; }));
   return jsonCache.get(path);
 }
 function href(id, params = {}) {
@@ -228,18 +238,119 @@ function responseLink(id, preferred, label = id) {
 }
 
 function workbenchShell(lesson) {
-  return `<section class="workbench" id="workbench-${lesson.id}" data-workbench="${lesson.id}" aria-busy="false"><h3>内嵌证据工作台</h3><div class="reading-return">${returnReadingMarkup()}</div>${lesson.readingGuide ? `<div class="evidence-focus"><strong>本章重点</strong><p>${esc(lesson.readingGuide.focus)}</p><div class="reading-targets">${guideTargets(lesson)}</div></div>` : ''}<p class="workbench-intro">选择本章实验和请求，按需展开完整记录；预热请求也在列表中。</p><div class="workbench-selectors"><label>实验 <select class="experiment-select" aria-label="选择实验">${lesson.evidenceIds.map(id => { const experiment = experiments.find(item => item.id === id); return `<option value="${esc(id)}">${esc(experiment?.title || id)}</option>`; }).join('')}</select></label><label>请求 <select class="stage-select" aria-label="选择请求"></select></label></div><div class="experiment-summary"></div><div class="request-controls"><button data-stage-prev>← 上一次请求</button><button data-stage-next>下一次请求 →</button><button data-share>复制此位置链接</button></div><div class="request-metadata"></div><div class="workbench-tabs" aria-label="工作台视图"><button data-view="request">输入与工具定义</button><button data-view="output">模型输出</button><button data-view="calls">工具调用与结果</button><button data-view="compare">客户端 / 上游</button><button data-view="raw">原始记录</button></div><div class="workbench-content"><button class="load-evidence">加载本次请求</button></div></section><section class="supplement" id="supplement-${lesson.id}" hidden aria-label="补充原始证据"></section>`;
+  return `<section class="workbench" id="workbench-${lesson.id}" data-workbench="${lesson.id}" aria-busy="false"><div class="reading-return">${returnReadingMarkup()}</div><div class="workbench-head"><h3>内嵌证据工作台</h3>${lesson.readingGuide ? `<div class="evidence-focus"><strong>本章重点</strong><p>${esc(lesson.readingGuide.focus)}</p><div class="reading-targets">${guideTargets(lesson)}</div></div>` : ''}<p class="workbench-intro">选择本章实验和请求，按需展开完整记录；预热请求也在列表中。</p><div class="workbench-selectors"><label>实验 <select class="experiment-select" aria-label="选择实验">${lesson.evidenceIds.map(id => { const experiment = experiments.find(item => item.id === id); return `<option value="${esc(id)}">${esc(experiment?.title || id)}</option>`; }).join('')}</select></label><label>请求 <select class="stage-select" aria-label="选择请求"></select></label></div><div class="experiment-summary"></div><div class="request-controls"><button data-stage-prev>← 上一次请求</button><button data-stage-next>下一次请求 →</button><button data-share>复制此位置链接</button></div><div class="request-metadata"></div><div class="workbench-tabs" aria-label="工作台视图"><button data-view="request">输入与工具定义</button><button data-view="output">模型输出</button><button data-view="calls">工具调用与结果</button><button data-view="compare">客户端 / 上游</button><button data-view="raw">原始记录</button></div></div><div class="workbench-content"><button class="load-evidence">加载本次请求</button></div></section><section class="supplement" id="supplement-${lesson.id}" hidden aria-label="补充原始证据"></section>`;
+}
+const helloParts = ['工具定义', 'Codex 工作说明', 'Desktop 能力、技能目录、权限与协作', '多 Agent 角色', '多 Agent 约束', '插件、AGENTS 规则、环境信息', '“你好”'];
+const loopSteps = [
+  ['R0', '读取项目', '模型用一次 exec 安排读取技能、文件清单和项目文件。'],
+  ['R1', '搜索调用位置', '模型搜索 calculateTotal 的定义、调用位置和项目规则。'],
+  ['R2', '修改代码与说明', '模型提出补丁，把加法改为乘法，并更新 README 的状态说明。'],
+  ['R3', '验证修改', '模型安排类型检查、测试和示例运行，并重读修改后的文件。'],
+  ['R4', '汇报结果', '模型汇报修复与验证结果，没有再提出工具调用。'],
+];
+const arrowIcon = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const checkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function chapterKicker(lesson) {
+  const count = lesson.evidenceIds.length;
+  const status = lesson.status === 'partial' ? '含待验证内容' : `实测记录 · ${count} 组实验`;
+  return `<p class="chapter-kicker"><span>第 ${lessonNumber(lesson)} 章</span><span class="status-chip">${lesson.status === 'partial' ? '' : checkIcon}${status}</span></p>`;
+}
+function evidenceRail(lesson) {
+  const target = lesson.readingGuide?.targets?.[0];
+  const experiment = experiments.find(item => item.id === (target?.experiment || lesson.evidenceIds[0]));
+  if (!experiment) return '';
+  const stats = experiment.stats || {};
+  const others = lesson.evidenceIds.filter(id => id !== experiment.id).length;
+  return `<aside class="evidence-rail" aria-label="本章证据"><div class="rail-card"><header><p>本章证据</p><strong>${esc(experiment.title)}</strong></header><dl><div><dt>模型请求</dt><dd>${stats.requests ?? '—'}</dd></div><div><dt>工具调用</dt><dd>${stats.toolCalls ?? '—'}</dd></div><div class="wide"><dt>输入 token 合计</dt><dd>${Number(stats.inputTokens || 0).toLocaleString('en-US')}</dd></div></dl>${others ? `<p class="rail-more">本章另有 ${others} 组关联实验</p>` : ''}<a class="rail-open" href="${href(lesson.id, { section: 'workbench-' + lesson.id })}">打开证据工作台</a></div>${lesson.readingGuide ? `<div class="rail-focus"><p>本章重点</p><p>${esc(lesson.readingGuide.focus)}</p></div>` : ''}</aside>`;
 }
 function homeMarkup() {
-  return `<section class="home-page" id="home-view"><header class="home-hero"><span class="eyebrow">“你好”，就是 Codex 的 Hello World</span><h1><span>Codex</span><br class="hero-break"> 是如何工作的</h1><p>在真实 Codex Desktop 中，用一个简单的 TypeScript 项目做实验。打开请求和响应，查看请求中可见的完整上下文。</p><div class="hero-actions"><a class="primary-button" data-start-learning href="${href(catalog.lessons[0].id)}">开始学习 <span aria-hidden="true">→</span></a><a class="secondary-button" href="#/guide">阅读导读</a></div><div class="hero-evidence-links"><a data-hello-request href="${evidenceHref('01-request', '01-hello', 1, 'request')}">查看真实请求与上下文</a><span aria-hidden="true">·</span><a data-hello-response href="${evidenceHref('01-request', '01-hello', 1, 'output')}">查看响应与输出</a></div><p class="reading-options">无需安装即可阅读。亲自复现前，请先看<a href="#/guide">环境准备</a>。</p><div id="continue-reading" hidden></div><div class="hero-meta">${catalog.lessons.length} 个主题 <span>·</span> ${experiments.length} 组实验</div></header><section class="home-example" aria-label="贯穿教程的修复案例"><div><span class="eyebrow">从这个错误开始</span><h2>10 × 3，为什么得到 13？</h2><p>读文件、定位错误、修改运算符，再运行测试。一次用户要求，对应五次模型请求。</p><a href="${href('03-agent-loop', { section: 'agent-loop-timeline' })}">跟踪这次修复 <span aria-hidden="true">→</span></a></div><div class="bug-example"><div><span>修复前</span><code>return unitPrice + quantity;</code><strong>13</strong></div><div><span>修复后</span><code>return unitPrice * quantity;</code><strong>30 <small>测试通过</small></strong></div></div></section><section class="learning-path" aria-labelledby="path-title"><div class="path-header"><span class="eyebrow">学习路线</span><h2 id="path-title">从一次请求，到完整运行</h2><p>先读懂输入和工具往返，再追查上下文、扩展能力与完成条件。</p></div>${catalog.groups.map((group, index) => `<section class="phase-section" data-phase="${group.id}"><header class="phase-header"><span class="phase-number">0${index + 1}</span><div><h3>${esc(group.title)}</h3><p>${esc(group.description)}</p></div></header><div class="lesson-grid">${catalog.lessons.filter(lesson => lesson.group === group.id).map(lesson => `<a class="lesson-card" href="${href(lesson.id)}" data-card-lesson="${lesson.id}"><div class="card-top"><span>${lessonNumber(lesson)}</span><span aria-hidden="true">↗</span></div><h4>${esc(lesson.title)}</h4><p>${esc(lesson.subtitle)}</p>${lesson.status === 'partial' ? '<small class="card-status">含待验证内容</small>' : ''}</a>`).join('')}</div></section>`).join('')}</section></section>`;
+  const stageCount = experiments.reduce((sum, experiment) => sum + experiment.stages.length, 0);
+  return `<section class="home-page" id="home-view">
+<header class="home-hero"><div class="hero-copy">
+<span class="eyebrow">基于 Codex Desktop 的真实请求日志</span>
+<h1>Codex<br class="hero-break"> 是如何工作的</h1>
+<p class="hero-lead">给 Codex 发一句“你好”，就是这份教程的 Hello World。模型收到的远不止这两个字：用一个简单的 TypeScript 项目做实验，逐项打开请求、响应和请求中可见的完整上下文。</p>
+<div class="hero-actions"><a class="primary-button" data-start-learning href="${href(catalog.lessons[0].id)}">从第 1 章开始 ${arrowIcon}</a><a class="secondary-button" href="#/guide">阅读导读</a></div>
+<div class="hero-evidence-links"><a data-hello-request href="${evidenceHref('01-request', '01-hello', 1, 'request')}">打开“你好”的真实请求</a><span aria-hidden="true">·</span><a data-hello-response href="${evidenceHref('01-request', '01-hello', 1, 'output')}">查看响应与输出</a></div>
+<div id="continue-reading" hidden></div>
+<dl class="hero-stats"><div><dt>主题</dt><dd>${catalog.lessons.length} 章</dd></div><div><dt>真实实验</dt><dd>${experiments.length} 组</dd></div><div><dt>请求阶段</dt><dd>${stageCount} 个</dd></div></dl>
+<p class="reading-options">无需安装即可阅读。亲自复现前，请先看<a href="#/guide">环境准备</a>。</p>
+</div>
+<figure class="token-anatomy" data-token-anatomy aria-busy="true"><figcaption class="token-anatomy-head"><strong>发送“你好”时，模型收到了什么</strong><a href="${evidenceHref('01-request', '01-hello', 1, 'request')}">01-hello / 01-request</a></figcaption><div class="token-anatomy-body"><p class="token-note">正在读取这次请求的计量…</p></div></figure>
+</header>
+<section class="learning-path" aria-labelledby="path-title"><div class="home-band">
+<div class="home-section-head"><div><span class="eyebrow">学习路线</span><h2 id="path-title">四个阶段，沿同一个项目读下去</h2></div><p>每章从一个界面操作出发，再到日志里找答案。章末留一道题，先自己判断，再展开对照。</p></div>
+<div class="phase-grid">${catalog.groups.map((group, index) => `<section class="phase-section" data-phase="${group.id}"><header class="phase-header"><span class="phase-number">阶段 ${index + 1}</span><h3>${esc(group.title)}</h3><p>${esc(group.description)}</p></header><div class="lesson-grid">${catalog.lessons.filter(lesson => lesson.group === group.id).map(lesson => `<a class="lesson-card" href="${href(lesson.id)}" data-card-lesson="${lesson.id}" title="${esc(lesson.subtitle)}"><span class="card-top"><span>${lessonNumber(lesson)}</span></span><h4>${esc(lesson.title)}</h4>${lesson.status === 'partial' ? '<small class="card-status">含待验证内容</small>' : ''}</a>`).join('')}</div></section>`).join('')}</div>
+</div></section>
+<section class="home-example" aria-label="贯穿教程的修复案例"><div class="example-copy">
+<span class="eyebrow">第 3 章 · 完整修复案例</span>
+<h2>10 × 3，为什么得到 13？</h2>
+<p>项目把单价和数量相加，测试期望 30 元。一次“修好它”的要求，在日志里是五次模型请求和四次工具往返：读文件、找位置、改代码、跑验证，最后汇报。</p>
+<div class="bug-example"><div class="bug-before"><code>- return unitPrice + quantity;</code><span>13</span></div><div class="bug-after"><code>+ return unitPrice * quantity;</code><span>30</span></div></div>
+<a class="example-link" href="${href('03-agent-loop', { section: 'agent-loop-timeline' })}">沿时间线看五次请求 ${arrowIcon}</a>
+</div>
+<ol class="loop-steps">${loopSteps.map(([id, title, text]) => `<li><span class="loop-mark" aria-hidden="true"><b>${id}</b><i></i></span><div><h3>${title}</h3><p>${text}</p></div></li>`).join('')}</ol>
+</section>
+<section class="home-evidence" aria-labelledby="evidence-title"><div class="home-band">
+<span class="eyebrow">证据工作台</span>
+<h2 id="evidence-title">每个结论都能回到原始记录</h2>
+<p class="lead">正文里的说法都链接到对应的请求阶段。工作台可以按输入项展开、按编号配对工具调用，也可以对照客户端与上游的两份记录。</p>
+<div class="view-cards">
+<article><div><h3>输入与工具定义</h3><p>按 input 序号展开每一项，分清应用说明、项目规则和用户原话。</p></div><pre>input[6]  message · user
+  content[0].text = "你好\\n"</pre></article>
+<article><div><h3>工具调用与结果</h3><p>用同一个 call_id 把模型提出的动作和本地返回的结果配对。</p></div><pre>custom_tool_call         exec
+custom_tool_call_output  exit_code: 0
+call_id  call_a288dLl8tyNv8JFlTJgNdtfK</pre></article>
+<article><div><h3>客户端与上游对照</h3><p>并排查看 Desktop 发出的请求与 CPA 转发到上游的记录。</p></div><pre>client    01-request.request.json
+upstream  01-request.upstream.json</pre></article>
+</div>
+<p class="privacy-note">公开记录已脱敏，敏感内容以占位符替换；“完整上下文”限于所保存请求中可见的内容。</p>
+</div></section>
+</section>`;
+}
+let tokenAnatomyState = 'idle';
+async function renderTokenAnatomy() {
+  const figure = document.querySelector('[data-token-anatomy]');
+  if (!figure || tokenAnatomyState !== 'idle') return;
+  tokenAnatomyState = 'loading';
+  const body = figure.querySelector('.token-anatomy-body');
+  try {
+    const stage = experiments.find(item => item.id === '01-hello').stages.find(item => !item.prewarm);
+    const [request, response] = await Promise.all([loadJson(stage.requestFile), loadJson(stage.responseFile)]);
+    const usage = (response.response || response).usage;
+    const attributed = usage.attribution.items;
+    const parts = request.input.map((item, index) => ({ index, label: helloParts[index] || item.type, tokens: attributed[item.id]?.input_tokens ?? 0 }));
+    const counted = parts.reduce((sum, part) => sum + part.tokens, 0);
+    const user = parts.at(-1);
+    const color = part => part === user ? 'var(--teal)' : `var(--seg-${Math.min(part.index, 5)})`;
+    const number = value => value.toLocaleString('en-US');
+    body.innerHTML = `<p class="token-total"><b>${number(usage.input_tokens)}</b><span>个输入 token，其中“你好”只有 <strong>${number(user.tokens)}</strong> 个</span></p>
+<div class="token-bar" role="img" aria-label="${parts.length} 个输入项的 token 占比">${parts.map(part => `<span style="flex:${part.tokens} 1 0;--seg:${color(part)}"></span>`).join('')}</div>
+<ul class="token-list">${parts.map(part => `<li${part === user ? ' class="is-user"' : ''}><i style="--seg:${color(part)}"></i><code>input[${part.index}]</code><span>${esc(part.label)}</span><b>${number(part.tokens)}</b></li>`).join('')}</ul>
+<p class="token-note">数据来自本次响应的 <code>usage.attribution</code>${usage.input_tokens > counted ? `，另有 ${number(usage.input_tokens - counted)} 个 token 计在回答消息下` : ''}。</p>`;
+    tokenAnatomyState = 'done';
+  } catch (error) {
+    console.error(error);
+    tokenAnatomyState = 'idle';
+    body.innerHTML = '<p class="token-note">暂时无法读取这次请求的计量，可以直接打开原始请求查看。</p>';
+  } finally {
+    figure.setAttribute('aria-busy', 'false');
+  }
 }
 function shell() {
-  document.querySelector('#app').innerHTML = `<a class="skip-link" href="#main">跳至正文</a><header class="site-header"><div class="header-start"><button class="menu-toggle" aria-label="展开学习目录" aria-controls="course-sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button><a class="brand" href="#/" aria-label="回到教程首页"><img class="brand-icon" src="${brandIcon}" width="31" height="31" alt=""><span>How Codex Works</span></a></div><div class="header-actions"><button id="theme-toggle" aria-label="切换深浅主题" aria-pressed="false"></button><a class="github-corner" href="${repo}" target="_blank" rel="noopener" aria-label="在 GitHub 查看项目源码"><svg viewBox="0 0 250 250" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" class="octo-arm"></path><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor"></path></svg></a></div></header><div class="mobile-shade" hidden></div><aside id="course-sidebar" class="course-sidebar" aria-label="课程目录与搜索"><div class="directory-search"><span>⌕</span><input id="chapter-search" type="search" aria-label="搜索文档" placeholder="搜索课程…"><button id="clear-search" aria-label="清除搜索" hidden>×</button></div><p id="search-status" role="status" aria-live="polite" hidden></p><div id="search-results" hidden></div><nav id="chapter-nav" aria-label="教程目录">${navMarkup()}</nav></aside><main id="main" tabindex="-1" aria-busy="true">${homeMarkup()}<section class="reader-page" id="reader-view" hidden><nav class="breadcrumb" aria-label="当前位置"></nav><div class="reading-layout"><div class="reading-content"><div id="lesson-content"></div><nav class="chapter-pagination" aria-label="章节翻页"></nav></div></div></section></main><footer class="site-footer"><div><a href="#/">Codex 是如何工作的</a></div></footer><button id="back-top" aria-label="回到顶部">↑</button><div class="toast" role="status" aria-live="polite"></div><aside id="term-definition" class="term-popover" popover aria-label="术语解释"><button data-close-term aria-label="关闭术语解释">×</button><strong></strong><p></p><a></a></aside>`;
+  document.querySelector('#app').innerHTML = `<a class="skip-link" href="#main">跳至正文</a><header class="site-header"><div class="header-start"><button class="menu-toggle" aria-label="展开学习目录" aria-controls="course-sidebar" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button><a class="brand" href="#/" aria-label="回到教程首页"><img class="brand-icon" src="${brandIcon}" width="31" height="31" alt=""><span>How Codex Works</span></a></div><div class="header-actions"><button id="theme-toggle" class="icon-button" type="button" aria-label="切换深浅主题" aria-pressed="false"><svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg><svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button><a class="github-link icon-button" href="${repo}" target="_blank" rel="noopener" aria-label="在 GitHub 查看项目源码"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5a9.5 9.5 0 0 0-3 18.5c.5.1.7-.2.7-.5v-1.7c-2.7.6-3.2-1.2-3.2-1.2-.4-1.1-1.1-1.4-1.1-1.4-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.3-2.1-.2-4.4-1.1-4.4-4.8 0-1 .4-1.9 1-2.6-.1-.3-.4-1.2.1-2.6 0 0 .8-.3 2.6 1a9 9 0 0 1 4.8 0c1.8-1.3 2.6-1 2.6-1 .5 1.4.2 2.3.1 2.6.6.7 1 1.6 1 2.6 0 3.7-2.3 4.6-4.4 4.8.3.3.7.9.7 1.8v2.7c0 .3.2.6.7.5A9.5 9.5 0 0 0 12 2.5Z" fill="currentColor"/></svg></a></div></header><div class="mobile-shade" hidden></div><aside id="course-sidebar" class="course-sidebar" aria-label="课程目录与搜索"><div class="directory-search"><span aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span><input id="chapter-search" type="search" aria-label="搜索文档" placeholder="搜索课程…"><button id="clear-search" aria-label="清除搜索" hidden>×</button></div><p id="search-status" role="status" aria-live="polite" hidden></p><div id="search-results" hidden></div><nav id="chapter-nav" aria-label="教程目录">${navMarkup()}</nav></aside><main id="main" tabindex="-1" aria-busy="true">${homeMarkup()}<section class="reader-page" id="reader-view" hidden><nav class="breadcrumb" aria-label="当前位置"></nav><div class="reading-layout"><div class="reading-content"><div id="lesson-content"></div><nav class="chapter-pagination" aria-label="章节翻页"></nav></div></div></section></main><footer class="site-footer"><div><a href="#/">Codex 是如何工作的</a></div></footer><button id="back-top" aria-label="回到顶部">↑</button><div class="toast" role="status" aria-live="polite"></div><aside id="term-definition" class="term-popover" popover aria-label="术语解释"><button data-close-term aria-label="关闭术语解释">×</button><strong></strong><p></p><a></a></aside>`;
   document.querySelector('#theme-toggle').onclick = () => {
     document.documentElement.classList.toggle('dark');
     syncThemeButton();
     try { localStorage.setItem('ah-theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light'); } catch { /* Theme remains usable without storage. */ }
   };
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+    let saved = null;
+    try { saved = localStorage.getItem('ah-theme'); } catch { /* Without storage, keep following the system. */ }
+    if (saved === 'dark' || saved === 'light') return;
+    document.documentElement.classList.toggle('dark', event.matches);
+    syncThemeButton();
+  });
   document.querySelector('.menu-toggle').onclick = () => toggleMenu(!sidebarIsOpen());
   document.querySelector('.mobile-shade').onclick = () => toggleMenu(false);
   document.querySelector('.skip-link').onclick = event => { event.preventDefault(); document.querySelector('#main').focus(); document.querySelector('#main').scrollIntoView(); };
@@ -280,10 +391,13 @@ function shell() {
   }), { rootMargin: '-64px 0px 150px 0px' });
   syncThemeButton(); syncSidebar(); refreshContinueReading();
 }
+function setDescription(text) {
+  // Keep the per-chapter summary available to bookmarks, reader modes and browser history.
+  if (text) document.querySelector('meta[name="description"]')?.setAttribute('content', text);
+}
 function syncThemeButton() {
   const dark = document.documentElement.classList.contains('dark');
   const button = document.querySelector('#theme-toggle');
-  button.textContent = dark ? '☀️' : '🌙';
   button.title = dark ? '切换至浅色主题' : '切换至深色主题';
   button.setAttribute('aria-pressed', String(dark));
 }
@@ -347,6 +461,12 @@ function resolveSection(lessonId, fragment) {
   const slug = text => text.toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/\s/g, '-');
   return Object.entries(sectionIds[lessonId] || {}).find(([text, id]) => id === target || text === target || slug(text) === target)?.[1] || target;
 }
+const highlightLanguages = /(?:^|\s)language-(?:json|ts|typescript|js|javascript|bash|powershell|diff|toml|markdown)(?:\s|$)/;
+function highlightCode(container) {
+  const codes = [...container.querySelectorAll('pre > code')].filter(code => highlightLanguages.test(code.className));
+  if (!codes.length) return;
+  import('./highlight.js').then(({ highlight }) => codes.forEach(highlight)).catch(error => console.warn('代码着色不可用', error));
+}
 function decorateMarkdown(container, lesson) {
   const { outline: headings } = indexPassages(container, lesson, sectionIds);
   headings.forEach(({ id }) => {
@@ -400,6 +520,7 @@ function decorateMarkdown(container, lesson) {
     toolbar.innerHTML = `<span>${esc(pre.querySelector('code')?.className.match(/language-(\S+)/)?.[1] || 'TEXT')}</span>${copyButton(pre.textContent)}`;
     wrapper.append(toolbar, pre);
   });
+  highlightCode(container);
   container.querySelectorAll('table').forEach(table => { const wrapper = document.createElement('div'); wrapper.className = 'table-scroll'; wrapper.tabIndex = 0; table.replaceWith(wrapper); wrapper.append(table); });
   annotateTerms(container, glossary);
   outlines.set(lesson.id, headings);
@@ -417,7 +538,7 @@ async function ensurePage(lesson) {
     } else {
       page.id = 'chapter-' + lesson.id; page.className = 'chapter'; page.dataset.lesson = lesson.id;
       const markdown = text.replace(/^# [^\n]+\n/, '');
-      template.innerHTML = `<header class="chapter-header"><h1>${esc(lesson.title)}</h1><p class="chapter-subtitle">${esc(lesson.subtitle || '')}</p></header><article class="prose">${DOMPurify.sanitize(marked.parse(markdown))}</article>${workbenchShell(lesson)}`;
+      template.innerHTML = `<header class="chapter-header">${chapterKicker(lesson)}<h1>${esc(lesson.title)}</h1><p class="chapter-subtitle">${esc(lesson.subtitle || '')}</p></header>${evidenceRail(lesson)}<article class="prose">${DOMPurify.sanitize(marked.parse(markdown))}</article>${workbenchShell(lesson)}`;
       // The Markdown navigation still works on GitHub; the site has a dedicated
       // previous/next control below the workbench.
       const last = template.content.querySelector('.prose > p:last-child');
@@ -481,6 +602,7 @@ function showPage(page, lesson) {
   document.querySelectorAll('[data-reader-page]').forEach(node => node.hidden = node !== page);
   setActive(lesson?.id || '');
   syncSidebar(); refreshContinueReading();
+  if (!page) renderTokenAnatomy();
   if (!page) { document.querySelector('.chapter-outline')?.remove(); return; }
   const group = catalog.groups.find(item => item.id === lesson.group);
   document.querySelector('.breadcrumb').innerHTML = `<a href="#/">学习路线</a><span aria-hidden="true">/</span>${group ? `<span>${esc(group.title)}</span><span aria-hidden="true">/</span>` : ''}<span aria-current="page">${lesson.id === 'introduction' ? '导读' : esc(lesson.title)}</span>`;
@@ -763,7 +885,7 @@ async function route() {
   if (!lesson && id !== 'introduction') {
     if (id) showToast('未找到该章节，已返回学习路线。');
     showPage(null); main.setAttribute('aria-busy', 'false');
-    document.title = 'Codex 是如何工作的';
+    document.title = 'Codex 是如何工作的'; setDescription(catalog.description);
     window.scrollTo({ top: 0, behavior: 'instant' }); return;
   }
   if (id === 'introduction') lesson = { id: 'introduction', file: 'course/introduction.md', title: '导读与实验准备' };
@@ -772,6 +894,7 @@ async function route() {
   if (currentRoute !== routeNumber) return;
   showPage(page, lesson);
   document.title = lesson.title + ' · Codex 是如何工作的';
+  setDescription(lesson.subtitle || catalog.description);
   await renderDiagrams(page);
   if (currentRoute !== routeNumber) return;
   main.setAttribute('aria-busy', 'false');

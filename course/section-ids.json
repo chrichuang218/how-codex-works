@@ -13,7 +13,8 @@
     "消息与内容块的边界": "01-request-section-4",
     "请求级配置与来源": "01-request-section-5",
     "深入核对：预热与正式请求": "01-request-section-6",
-    "自己找到两条 user 消息": "01-request-section-7"
+    "自己找到两条 user 消息": "01-request-section-7",
+    "这句问候用了多少 token？": "01-request-section-8"
   },
   "02-tools": {
     "文件内容在什么时候出现？": "02-tools-section-0",
@@ -151,6 +152,7 @@
     "沿一条修改追到磁盘": "15-architecture-section-0",
     "哪一种记录能回答你的问题？": "15-architecture-section-2",
     "深入核对：架构解释与旧样本的关系": "15-architecture-section-3",
-    "用自己的新日志完成一次验收": "15-architecture-section-4"
+    "用自己的新日志完成一次验收": "15-architecture-section-4",
+    "回看全书：一轮工作经过哪些环节": "15-architecture-section-5"
   }
 }
