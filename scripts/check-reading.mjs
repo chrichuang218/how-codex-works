@@ -342,13 +342,14 @@ export async function checkReading(page, url, label = 'local') {
   await page.locator('#main[aria-busy="false"]').waitFor();
   if (await page.locator('html').evaluate(node => node.classList.contains('dark'))) await page.locator('#theme-toggle').click();
   assert.equal(await page.locator('.site-header .search-toggle').count(), 0, 'Search should only be offered in the directory');
-  assert.equal(await page.locator('.github-corner').getAttribute('href'), 'https://github.com/chrichuang218/how-codex-works');
-  assert.equal(await page.locator('#theme-toggle').textContent(), '🌙');
+  assert.equal(await page.locator('.github-link').getAttribute('href'), 'https://github.com/chrichuang218/how-codex-works');
+  const themeIcon = () => page.locator('#theme-toggle svg:visible').getAttribute('class');
+  assert.equal(await themeIcon(), 'icon-moon');
   await page.locator('#theme-toggle').click();
-  assert.equal(await page.locator('#theme-toggle').textContent(), '☀️');
+  assert.equal(await themeIcon(), 'icon-sun');
   await page.reload(); await page.locator('#main[aria-busy="false"]').waitFor();
   assert.equal(await page.locator('#theme-toggle').getAttribute('aria-pressed'), 'true', 'The theme and its icon must survive reload together');
-  assert.equal(await page.locator('#theme-toggle').textContent(), '☀️');
+  assert.equal(await themeIcon(), 'icon-sun');
   await page.locator('#theme-toggle').click();
   const noOverflow = async name => assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, name + ': page overflows horizontally');
 

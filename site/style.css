@@ -133,18 +133,36 @@ body[data-view=home] #main{margin-left:0;padding:0 32px 80px}body[data-view=home
 }
 @media(max-width:360px){.brand-icon{display:none}}
 
-/* Reference: How Claude Code Works index.html; Docsify GitHub corner (MIT). */
-.site-header .header-actions{position:absolute;top:12px;right:100px}
-.header-actions #theme-toggle{position:relative;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;min-width:34px;min-height:34px;padding:0;border:1.5px solid #7c5cfc;border-radius:50%;background:#fff;color:#7c5cfc;font-size:16px;line-height:1;transition:background .25s,transform .25s,box-shadow .25s}
-#theme-toggle::before{content:"";position:absolute;inset:-5px;border-radius:50%}
-.header-actions #theme-toggle:hover{background:#7c5cfc;color:#fff;transform:translateY(-1px);box-shadow:0 3px 12px #7c5cfc4d}
-.header-actions #theme-toggle:active{transform:translateY(0)}
-.dark .header-actions #theme-toggle{background:#1e1e38;border-color:#9d84fc;color:#9d84fc}
-.dark .header-actions #theme-toggle:hover{background:#9d84fc;color:#fff}
-.header-actions .github-corner{display:block;position:fixed;top:0;right:0;width:70px;height:70px;line-height:0;clip-path:polygon(0 0,100% 0,100% 100%)}
-.github-corner svg{width:100%;height:100%;fill:#7c5cfc;color:var(--paper)}
-.github-corner .octo-arm{transform-origin:130px 106px}
-.github-corner:hover .octo-arm{animation:octocat-wave 560ms ease-in-out}
-@keyframes octocat-wave{0%,100%{transform:rotate(0)}20%,60%{transform:rotate(-25deg)}40%,80%{transform:rotate(10deg)}}
-@media(max-width:760px){.site-header .header-actions{right:72px}.header-actions .github-corner{width:56px;height:56px}}
-@media(prefers-reduced-motion:reduce){.header-actions #theme-toggle{transition:none}.github-corner:hover .octo-arm{animation:none}}
+/* Touch screens: keep primary controls at least 44px tall without changing the desktop layout. */
+@media(pointer:coarse){.menu-toggle,#theme-toggle,#back-top{min-width:44px;min-height:44px}.course-sidebar a{min-height:40px;display:flex;align-items:center}.workbench select,.workbench button{min-height:40px}}
+/* Search icon sits inside the field, as in the reference directory. */
+.directory-search>span{position:absolute;left:30px;top:50%;margin-top:2px;transform:translateY(-50%);display:flex;pointer-events:none;color:var(--muted)}
+.directory-search>span svg{width:15px;height:15px}
+#chapter-search{padding-left:31px}
+.menu-open .directory-search{position:relative}
+/* Chapter code blocks share the paragraph measure; the toolbar stays light so short snippets do not read as panels. */
+.prose>.code-panel,.prose details>.code-panel,.prose li>.code-panel{max-width:740px}
+.prose .code-toolbar{padding:6px 14px 0;border-bottom:0;font-size:11px}
+.prose .code-toolbar>span{text-transform:lowercase;letter-spacing:.02em;opacity:.8}
+.prose .code-panel pre{padding-top:6px}
+:root{--hl-keyword:#8250df;--hl-string:#0a7a43;--hl-number:#b35900;--hl-comment:#6e7781;--hl-attr:#0550ae;--hl-title:#6639ba}
+:root.dark{--hl-keyword:#c3a6ff;--hl-string:#7ee2a8;--hl-number:#f2a967;--hl-comment:#8b949e;--hl-attr:#79c0ff;--hl-title:#d2a8ff}
+.hljs-keyword,.hljs-built_in,.hljs-literal,.hljs-meta .hljs-keyword{color:var(--hl-keyword)}
+.hljs-string,.hljs-regexp,.hljs-addition{color:var(--hl-string)}
+.hljs-number,.hljs-variable.language_{color:var(--hl-number)}
+.hljs-comment,.hljs-quote,.hljs-meta{color:var(--hl-comment)}
+.hljs-attr,.hljs-attribute,.hljs-property,.hljs-section,.hljs-variable{color:var(--hl-attr)}
+.hljs-title,.hljs-title.function_,.hljs-title.class_,.hljs-type{color:var(--hl-title)}
+.hljs-deletion{color:#cf222e}
+:root.dark .hljs-deletion{color:#ff8182}
+/* Print the chapter text only: navigation, controls and the live evidence workbench stay on screen. */
+@media print{
+:root,:root.dark{color:#000;background:#fff;--paper:#fff;--ink:#000;--muted:#444;--line:#ccc;--soft:#fff;--tint:#f4f4f4;--code:#f6f6f6;--code-ink:#000;color-scheme:light}
+.site-header,.course-sidebar,.mobile-shade,.skip-link,.site-footer,.chapter-pagination,.workbench,.toast,.term-popover,#back-top,.code-toolbar button,.reading-return{display:none!important}
+#main{margin:0!important;padding:0!important;min-height:0}
+.prose{font-size:11pt;line-height:1.6}
+.prose a{color:inherit;text-decoration:underline}
+.prose pre,.prose table,.prose img,.mermaid{break-inside:avoid}
+.prose pre{white-space:pre-wrap;overflow:visible;max-height:none}
+.prose h2,.prose h3{break-after:avoid}
+}

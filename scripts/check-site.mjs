@@ -117,7 +117,7 @@ try {
   }
   assert.equal(await page.locator('dialog').count(), 0, 'Reading/evidence must not require a dialog.');
   assert.ok((await page.locator('.home-hero').innerText()).includes('Hello World'));
-  assert.ok((await page.locator('.home-hero > p').allTextContents()).join('\n').includes('请求中可见的完整上下文'));
+  assert.ok((await page.locator('.home-hero p').allTextContents()).join('\n').includes('请求中可见的完整上下文'));
   await page.locator('[data-hello-request]').click();
   let helloEntry = await waitWorkbench('01-request', '01-hello', 1, 'request');
   assert.ok((await helloEntry.locator('[data-item-path="input[6]"]').innerText()).includes('你好'), 'Hello World entry must open the real greeting request, not the prewarm.');
