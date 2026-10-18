@@ -183,7 +183,7 @@ body[data-view=home] .site-footer{padding:32px max(32px,calc((100% - 1136px)/2))
 .site-footer>div>a{font-size:14px}
 
 /* ---------- Chapter ---------- */
-.reader-page{max-width:1100px;margin:0}
+.reader-page{max-width:1100px;margin:0 auto}
 .breadcrumb{font-size:13px;margin-bottom:22px}
 .chapter-header{margin-bottom:32px;padding-bottom:28px;border-bottom:1px solid var(--line)}
 .chapter-kicker{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 10px;font-size:13px}
